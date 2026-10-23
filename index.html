@@ -312,8 +312,17 @@
       <button type="button" class="drawer-link active" data-nav="pos">
         <i data-lucide="credit-card"></i> <span>New Sale</span>
       </button>
-      <button type="button" class="drawer-link" data-nav="sync">
-        <i data-lucide="refresh-cw"></i> <span>Sync Database</span>
+      <button type="button" class="drawer-link" data-nav="sales">
+        <i data-lucide="receipt"></i> <span>Manage Sales</span>
+      </button>
+      <button type="button" class="drawer-link" data-nav="products">
+        <i data-lucide="package"></i> <span>Products</span>
+      </button>
+      <button type="button" class="drawer-link" data-nav="inventory">
+        <i data-lucide="truck"></i> <span>Inventory</span>
+      </button>
+      <button type="button" class="drawer-link" data-nav="settings">
+        <i data-lucide="settings"></i> <span>Settings</span>
       </button>
       <div style="border-top:1px solid #e2e8f0; margin:10px 0;"></div>
       <button type="button" class="drawer-link" id="link-goto-backoffice" style="color:var(--primary-teal); font-weight:700;">
@@ -329,94 +338,7 @@
   </aside>
 
   <!-- ===================================================================== -->
-  <!-- MODAL: ADD NEW CUSTOMER -->
-  <!-- ===================================================================== -->
-  <div id="modal-add-customer" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
-    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
-      <button type="button" class="icon-touch-btn" id="btn-close-add-customer" aria-label="Close">
-        <i data-lucide="x"></i>
-      </button>
-      <h3 style="font-size:1rem; font-weight:700;">Add New Customer</h3>
-      <button type="button" id="btn-save-customer" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
-    </div>
-    <form id="form-new-customer" style="padding:20px;">
-      <div class="form-underline-group">
-        <label>Customer Code</label>
-        <div class="underline-input-wrap">
-          <input type="text" id="cust-code" readonly style="font-weight:700; color:var(--primary-teal-dark);" />
-        </div>
-      </div>
-      <div style="display:flex; gap:12px;">
-        <div class="form-underline-group" style="flex:1;">
-          <label>First Name</label>
-          <div class="underline-input-wrap">
-            <input type="text" id="cust-firstname" required />
-          </div>
-        </div>
-        <div class="form-underline-group" style="flex:1;">
-          <label>Last Name</label>
-          <div class="underline-input-wrap">
-            <input type="text" id="cust-lastname" required />
-          </div>
-        </div>
-      </div>
-      <div class="form-underline-group">
-        <label>Email Address</label>
-        <div class="underline-input-wrap">
-          <input type="email" id="cust-email" />
-        </div>
-      </div>
-      <div class="form-underline-group">
-        <label>Phone Number</label>
-        <div class="underline-input-wrap">
-          <input type="tel" id="cust-phone" placeholder="+254 7..." required />
-        </div>
-      </div>
-      <div class="form-underline-group">
-        <label>Street Address</label>
-        <div class="underline-input-wrap">
-          <input type="text" id="cust-address" />
-        </div>
-      </div>
-      <div style="display:flex; gap:12px;">
-        <div class="form-underline-group" style="flex:1;">
-          <label>City</label>
-          <div class="underline-input-wrap">
-            <input type="text" id="cust-city" />
-          </div>
-        </div>
-        <div class="form-underline-group" style="flex:1;">
-          <label>Region / County</label>
-          <div class="underline-input-wrap">
-            <input type="text" id="cust-region" />
-          </div>
-        </div>
-      </div>
-      <div style="display:flex; gap:12px;">
-        <div class="form-underline-group" style="flex:1;">
-          <label>Postal Code</label>
-          <div class="underline-input-wrap">
-            <input type="text" id="cust-postal" />
-          </div>
-        </div>
-        <div class="form-underline-group" style="flex:1;">
-          <label>Country</label>
-          <div class="underline-input-wrap">
-            <select id="cust-country">
-              <option value="Kenya" selected>Kenya</option>
-              <option value="Tanzania">Tanzania</option>
-              <option value="Uganda">Uganda</option>
-              <option value="Rwanda">Rwanda</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </form>
-  </div>
-
-  <!-- ===================================================================== -->
-  <!-- SCREEN: MANAGE SALES (Past Receipts & Cash Management) -->
+  <!-- 8. SCREEN: MANAGE SALES (Past Receipts & Cash Management) -->
   <!-- ===================================================================== -->
   <section id="screen-sales" class="screen hidden">
     <header class="pos-top-appbar">
@@ -470,7 +392,7 @@
   </section>
 
   <!-- ===================================================================== -->
-  <!-- SCREEN: PRODUCTS (Products & Categories) -->
+  <!-- 9. SCREEN: PRODUCTS & CATALOG -->
   <!-- ===================================================================== -->
   <section id="screen-products" class="screen hidden">
     <header class="pos-top-appbar">
@@ -497,62 +419,7 @@
   </section>
 
   <!-- ===================================================================== -->
-  <!-- MODAL: ADD PRODUCT -->
-  <!-- ===================================================================== -->
-  <div id="modal-add-product" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
-    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
-      <button type="button" class="icon-touch-btn" id="btn-close-add-product" aria-label="Close">
-        <i data-lucide="x"></i>
-      </button>
-      <h3 style="font-size:1rem; font-weight:700;">Add Product</h3>
-      <button type="button" id="btn-save-new-product" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
-    </div>
-    <form id="form-new-product" style="padding:20px;">
-      <div class="form-underline-group">
-        <label>Product Name</label>
-        <div class="underline-input-wrap">
-          <input type="text" id="prod-name" required />
-        </div>
-      </div>
-      <div class="form-underline-group">
-        <label>Category</label>
-        <div class="underline-input-wrap">
-          <select id="prod-category-select" required></select>
-        </div>
-      </div>
-      <div style="display:flex; gap:12px;">
-        <div class="form-underline-group" style="flex:1;">
-          <label>Retail Price (KES)</label>
-          <div class="underline-input-wrap">
-            <input type="number" step="0.01" id="prod-retail-price" required />
-          </div>
-        </div>
-        <div class="form-underline-group" style="flex:1;">
-          <label>Cost Price (KES)</label>
-          <div class="underline-input-wrap">
-            <input type="number" step="0.01" id="prod-cost-price" />
-          </div>
-        </div>
-      </div>
-      <div style="display:flex; gap:12px;">
-        <div class="form-underline-group" style="flex:1;">
-          <label>Barcode / SKU</label>
-          <div class="underline-input-wrap">
-            <input type="text" id="prod-sku" />
-          </div>
-        </div>
-        <div class="form-underline-group" style="flex:1;">
-          <label>Initial Stock</label>
-          <div class="underline-input-wrap">
-            <input type="number" id="prod-initial-stock" value="0" />
-          </div>
-        </div>
-      </div>
-    </form>
-  </div>
-
-  <!-- ===================================================================== -->
-  <!-- SCREEN: INVENTORY (GRN, SA, TOG) -->
+  <!-- 10. SCREEN: INVENTORY (GRN, SA, TOG) -->
   <!-- ===================================================================== -->
   <section id="screen-inventory" class="screen hidden">
     <header class="pos-top-appbar">
@@ -666,7 +533,7 @@
   </section>
 
   <!-- ===================================================================== -->
-  <!-- SCREEN: SETTINGS (Software & Printers) -->
+  <!-- 11. SCREEN: SETTINGS (Software & Printers) -->
   <!-- ===================================================================== -->
   <section id="screen-settings" class="screen hidden">
     <header class="pos-top-appbar">
@@ -747,7 +614,7 @@
   </section>
 
   <!-- ===================================================================== -->
-  <!-- 8. ITEM CUSTOMIZER MODAL -->
+  <!-- 12. MODAL: ITEM CUSTOMIZER -->
   <!-- ===================================================================== -->
   <div id="modal-item-customizer" class="screen hidden" style="background:#ffffff; z-index:200;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
@@ -790,7 +657,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- 9. CUSTOMER SELECTOR MODAL -->
+  <!-- 13. MODAL: CUSTOMER SELECTOR -->
   <!-- ===================================================================== -->
   <div id="modal-customer" class="screen hidden" style="background:#ffffff; z-index:200;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
@@ -803,11 +670,156 @@
     <div style="padding:14px; border-bottom:1px solid #f1f5f9;">
       <input type="text" id="inp-search-customer" placeholder="Search customer by name or phone..." style="width:100%; padding:10px 12px; border:1px solid var(--border-line); border-radius:4px; font-size:0.9rem; outline:none;" />
     </div>
+    <div style="padding:12px 14px; border-bottom:1px solid #f1f5f9;">
+      <button type="button" class="btn-outline-blue" id="btn-show-add-customer" style="height:38px; font-size:0.85rem;">+ ADD NEW CUSTOMER</button>
+    </div>
     <div id="customer-list-wrap" style="flex:1; overflow-y:auto; padding:10px 14px;"></div>
   </div>
 
   <!-- ===================================================================== -->
-  <!-- 10. TENDER / PAYMENT MODAL -->
+  <!-- 14. MODAL: ADD NEW CUSTOMER -->
+  <!-- ===================================================================== -->
+  <div id="modal-add-customer" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
+    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
+      <button type="button" class="icon-touch-btn" id="btn-close-add-customer" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+      <h3 style="font-size:1rem; font-weight:700;">Add New Customer</h3>
+      <button type="button" id="btn-save-customer" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
+    </div>
+    <form id="form-new-customer" style="padding:20px;">
+      <div class="form-underline-group">
+        <label>Customer Code</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="cust-code" readonly style="font-weight:700; color:var(--primary-teal-dark);" />
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>First Name</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-firstname" required />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Last Name</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-lastname" required />
+          </div>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Email Address</label>
+        <div class="underline-input-wrap">
+          <input type="email" id="cust-email" />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Phone Number</label>
+        <div class="underline-input-wrap">
+          <input type="tel" id="cust-phone" placeholder="+254 7..." required />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Street Address</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="cust-address" />
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>City</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-city" />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Region / County</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-region" />
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>Postal Code</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-postal" />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Country</label>
+          <div class="underline-input-wrap">
+            <select id="cust-country">
+              <option value="Kenya" selected>Kenya</option>
+              <option value="Tanzania">Tanzania</option>
+              <option value="Uganda">Uganda</option>
+              <option value="Rwanda">Rwanda</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 15. MODAL: ADD PRODUCT -->
+  <!-- ===================================================================== -->
+  <div id="modal-add-product" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
+    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
+      <button type="button" class="icon-touch-btn" id="btn-close-add-product" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+      <h3 style="font-size:1rem; font-weight:700;">Add Product</h3>
+      <button type="button" id="btn-save-new-product" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
+    </div>
+    <form id="form-new-product" style="padding:20px;">
+      <div class="form-underline-group">
+        <label>Product Name</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="prod-name" required />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Category</label>
+        <div class="underline-input-wrap">
+          <select id="prod-category-select" required></select>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>Retail Price (KES)</label>
+          <div class="underline-input-wrap">
+            <input type="number" step="0.01" id="prod-retail-price" required />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Cost Price (KES)</label>
+          <div class="underline-input-wrap">
+            <input type="number" step="0.01" id="prod-cost-price" />
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>Barcode / SKU</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="prod-sku" />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Initial Stock</label>
+          <div class="underline-input-wrap">
+            <input type="number" id="prod-initial-stock" value="0" />
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 16. MODAL: TENDER / CHECKOUT -->
   <!-- ===================================================================== -->
   <div id="modal-tender" class="screen hidden" style="background:#ffffff; z-index:200; overflow-y:auto;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
