@@ -1,4 +1,4 @@
-const CACHE_NAME = 'qs-pos-mobile-v3';
+const CACHE_NAME = 'qs-pos-mobile-direct-v1';
 
 const CRITICAL_ASSETS = [
   './',
@@ -46,19 +46,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
-  // STRICT BYPASS: Never intercept Cloudflare Worker, Supabase, or CDNs
+  // STRICT BYPASS: Never intercept Supabase network calls or CDN dependencies
   if (
-    url.includes('workers.dev') ||
     url.includes('supabase.co') ||
     url.includes('/rest/v1/') ||
     url.includes('/auth/v1/') ||
     url.includes('jsdelivr.net') ||
     url.includes('unpkg.com')
   ) {
-    return; // Let the browser handle standard live fetch directly
+    return;
   }
 
-  // Only handle static app-shell files
+  // Handle local shell navigation and cached static assets
   event.respondWith(
     caches.match(event.request).then((cached) => {
       return (
