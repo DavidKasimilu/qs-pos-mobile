@@ -11,35 +11,43 @@ let customDiscountMode = 'pct';
 let productsList = [];
 let categoriesList = [];
 
+// =========================================================================
+// Primary Bootstrap (Events Attached First, Lucide Renders Cleanly)
+// =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
-  // 1. Mount Views & Lucide Icons
+  // 1. Initialize View Router
   Router.init();
-  if (window.lucide) window.lucide.createIcons();
 
-  // 2. Bind DOM Interactions Immediately
+  // 2. Bind DOM Handlers Immediately to stable button wrappers
   bindNavigationEvents();
   bindAuthFlows();
   bindTerminalActions();
 
-  // 3. Initialize Service Worker & IndexedDB Storage
+  // 3. Render Lucide icons once DOM anchors are secured
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+
+  // 4. Register Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.warn);
   }
 
+  // 5. Initialize IndexedDB
   try {
     await IDB.init();
   } catch (err) {
-    console.warn('[IDB] Local storage initialization warning:', err);
+    console.warn('[IDB] Local storage fallback:', err);
   }
 
-  // 4. Background Sync Listener
+  // 6. Online Status Listener
   const statusPill = document.getElementById('connection-status-pill');
   SyncEngine.init((isOnline) => {
     if (statusPill) statusPill.style.display = isOnline ? 'none' : 'block';
   });
   if (statusPill) statusPill.style.display = navigator.onLine ? 'none' : 'block';
 
-  // 5. Session Validation
+  // 7. Validate Authentication Session
   try {
     const session = await Auth.syncSession();
     if (session?.user) {
@@ -48,13 +56,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       Router.navigate('splash', false);
     }
   } catch (err) {
-    console.warn('[Auth] Running in unauthenticated mode:', err);
+    console.warn('[Auth] Offline mode fallback:', err);
     Router.navigate('splash', false);
   }
 });
 
 // =========================================================================
-// Navigation & Transition Handlers
+// Screen Transitions
 // =========================================================================
 function bindNavigationEvents() {
   const gotoSignin = document.getElementById('btn-goto-signin');
@@ -122,18 +130,17 @@ function bootTerminal() {
 async function loadCatalogData() {
   const catSelect = document.getElementById('sel-pos-category');
 
-  // Load from local cache first
+  // Query local storage first
   productsList = await IDB.getCatalog();
   categoriesList = await IDB.getCategories();
 
-  // If local catalog is empty and network is online, refresh from Supabase
+  // If local catalog is empty and online, fetch from database
   if (!productsList.length && navigator.onLine && Auth.currentShop?.id) {
     await Auth.refreshLocalCatalog(Auth.currentShop.id);
     productsList = await IDB.getCatalog();
     categoriesList = await IDB.getCategories();
   }
 
-  // Populate category dropdown
   if (catSelect) {
     catSelect.innerHTML = `<option value="all">All Items</option>` +
       categoriesList.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -189,7 +196,6 @@ function renderProductRows(items) {
 
   if (window.lucide) window.lucide.createIcons({ root: container });
 
-  // Bind click on each product row to open the customizer
   container.querySelectorAll('.product-list-row').forEach((row) => {
     row.onclick = () => {
       const found = items.find((p) => p.id === row.dataset.id);
@@ -206,7 +212,10 @@ function bindAuthFlows() {
     const btn = document.getElementById(btnId);
     const inp = document.getElementById(inpId);
     if (btn && inp) {
-      btn.onclick = () => inp.type = inp.type === 'password' ? 'text' : 'password';
+      btn.onclick = (e) => {
+        e.preventDefault();
+        inp.type = inp.type === 'password' ? 'text' : 'password';
+      };
     }
   };
   wireToggle('toggle-pwd-login', 'login-password');
@@ -268,7 +277,7 @@ function bindAuthFlows() {
     };
   }
 
-  // 8-Digit OTP
+  // Confirm 8-Digit OTP
   const formOtp = document.getElementById('form-mobile-otp');
   if (formOtp) {
     formOtp.onsubmit = async (e) => {
@@ -345,7 +354,8 @@ function bindTerminalActions() {
   const openDrawer = document.getElementById('btn-open-drawer');
   
   if (openDrawer && drawer && backdrop) {
-    openDrawer.onclick = () => {
+    openDrawer.onclick = (e) => {
+      e.preventDefault();
       drawer.classList.add('active');
       backdrop.classList.add('active');
     };
@@ -357,7 +367,8 @@ function bindTerminalActions() {
 
   // Drawer Nav Links
   document.querySelectorAll('.drawer-link[data-nav]').forEach((link) => {
-    link.onclick = async () => {
+    link.onclick = async (e) => {
+      e.preventDefault();
       const target = link.dataset.nav;
       drawer.classList.remove('active');
       backdrop.classList.remove('active');
@@ -372,30 +383,44 @@ function bindTerminalActions() {
 
   const backOfficeLink = document.getElementById('link-goto-backoffice');
   if (backOfficeLink) {
-    backOfficeLink.onclick = () => window.open(CONFIG.BACKOFFICE_URL, '_blank');
+    backOfficeLink.onclick = (e) => {
+      e.preventDefault();
+      window.open(CONFIG.BACKOFFICE_URL, '_blank');
+    };
   }
 
   const logoutBtn = document.getElementById('btn-drawer-logout');
   if (logoutBtn) {
-    logoutBtn.onclick = async () => {
+    logoutBtn.onclick = async (e) => {
+      e.preventDefault();
       if (confirm('Log out of QuickSell POS?')) await Auth.signOut();
     };
   }
 
-  // 3-Dot Overflow Menu
+  // 3-Dot Overflow Menu (Toggles cleanly and doesn't swallow clicks)
   const overflow = document.getElementById('overflow-popup');
   const openOverflow = document.getElementById('btn-open-overflow');
   if (openOverflow && overflow) {
     openOverflow.onclick = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       overflow.classList.toggle('hidden');
+      if (window.lucide) window.lucide.createIcons({ root: overflow });
     };
-    window.addEventListener('click', () => overflow.classList.add('hidden'));
+
+    window.addEventListener('click', (e) => {
+      if (!overflow.classList.contains('hidden')) {
+        if (!overflow.contains(e.target) && e.target !== openOverflow) {
+          overflow.classList.add('hidden');
+        }
+      }
+    });
   }
 
   const optClear = document.getElementById('opt-clear-cart');
   if (optClear) {
-    optClear.onclick = () => {
+    optClear.onclick = (e) => {
+      e.preventDefault();
       if (confirm('Clear current ticket items?')) {
         Cart.clearTicket(true);
         if (overflow) overflow.classList.add('hidden');
@@ -405,16 +430,18 @@ function bindTerminalActions() {
 
   const optSync = document.getElementById('opt-trigger-sync');
   if (optSync) {
-    optSync.onclick = async () => {
+    optSync.onclick = async (e) => {
+      e.preventDefault();
       if (overflow) overflow.classList.add('hidden');
       await syncEverything();
     };
   }
 
-  // Ticket Discount Tag Icon
+  // Ticket Discount Button
   const ticketDiscBtn = document.getElementById('btn-apply-ticket-discount');
   if (ticketDiscBtn) {
-    ticketDiscBtn.onclick = () => {
+    ticketDiscBtn.onclick = (e) => {
+      e.preventDefault();
       const curDiscount = Cart.ticketDiscount || 0;
       const entered = prompt('Enter order discount amount (in KES):', curDiscount > 0 ? curDiscount : '');
       if (entered !== null) {
@@ -423,12 +450,13 @@ function bindTerminalActions() {
     };
   }
 
-  // Search Toggle & Filtering
+  // Search Toggle
   const searchWrap = document.getElementById('search-input-wrap');
   const searchInput = document.getElementById('inp-pos-search');
   const toggleSearch = document.getElementById('btn-toggle-search');
   if (toggleSearch && searchWrap && searchInput) {
-    toggleSearch.onclick = () => {
+    toggleSearch.onclick = (e) => {
+      e.preventDefault();
       searchWrap.classList.toggle('hidden');
       if (!searchWrap.classList.contains('hidden')) searchInput.focus();
     };
@@ -452,21 +480,26 @@ function bindTerminalActions() {
     if (catSelect) catSelect.onchange = filterCatalog;
   }
 
-  // Line Customizer Modal
+  // Customizer Modal
   const modalCust = document.getElementById('modal-item-customizer');
   const closeCust = document.getElementById('btn-close-customizer');
   if (closeCust && modalCust) {
-    closeCust.onclick = () => modalCust.classList.add('hidden');
+    closeCust.onclick = (e) => {
+      e.preventDefault();
+      modalCust.classList.add('hidden');
+    };
   }
 
   const qtyMinus = document.getElementById('btn-qty-minus');
   const qtyPlus = document.getElementById('btn-qty-plus');
   if (qtyMinus && qtyPlus) {
-    qtyMinus.onclick = () => {
+    qtyMinus.onclick = (e) => {
+      e.preventDefault();
       const inp = document.getElementById('inp-custom-qty');
       inp.value = Math.max(1, (parseFloat(inp.value) || 1) - 1);
     };
-    qtyPlus.onclick = () => {
+    qtyPlus.onclick = (e) => {
+      e.preventDefault();
       const inp = document.getElementById('inp-custom-qty');
       inp.value = (parseFloat(inp.value) || 1) + 1;
     };
@@ -475,14 +508,16 @@ function bindTerminalActions() {
   const discFixed = document.getElementById('btn-disc-mode-fixed');
   const discPct = document.getElementById('btn-disc-mode-pct');
   if (discFixed && discPct) {
-    discFixed.onclick = () => {
+    discFixed.onclick = (e) => {
+      e.preventDefault();
       customDiscountMode = 'fixed';
       discFixed.style.background = 'var(--primary-teal-light)';
       discFixed.style.color = 'var(--primary-teal-dark)';
       discPct.style.background = '#f1f5f9';
       discPct.style.color = 'var(--text-main)';
     };
-    discPct.onclick = () => {
+    discPct.onclick = (e) => {
+      e.preventDefault();
       customDiscountMode = 'pct';
       discPct.style.background = 'var(--primary-teal-light)';
       discPct.style.color = 'var(--primary-teal-dark)';
@@ -493,7 +528,8 @@ function bindTerminalActions() {
 
   const confirmAdd = document.getElementById('btn-confirm-item-add');
   if (confirmAdd && modalCust) {
-    confirmAdd.onclick = () => {
+    confirmAdd.onclick = (e) => {
+      e.preventDefault();
       if (!currentCustomizingProduct) return;
       const qty = parseFloat(document.getElementById('inp-custom-qty').value) || 1;
       const price = parseFloat(document.getElementById('inp-custom-price').value) || 0;
@@ -510,11 +546,15 @@ function bindTerminalActions() {
   const openCust = document.getElementById('btn-open-customer-modal');
   const closeCustList = document.getElementById('btn-close-customer');
   if (openCust && modalCustList && closeCustList) {
-    openCust.onclick = () => {
+    openCust.onclick = (e) => {
+      e.preventDefault();
       modalCustList.classList.remove('hidden');
       renderCustomerList();
     };
-    closeCustList.onclick = () => modalCustList.classList.add('hidden');
+    closeCustList.onclick = (e) => {
+      e.preventDefault();
+      modalCustList.classList.add('hidden');
+    };
   }
 
   const searchCustInput = document.getElementById('inp-search-customer');
@@ -530,7 +570,8 @@ function bindTerminalActions() {
   const chargeBtn = document.getElementById('btn-charge-ticket');
   const closeTender = document.getElementById('btn-close-tender');
   if (chargeBtn && modalTender && closeTender) {
-    chargeBtn.onclick = () => {
+    chargeBtn.onclick = (e) => {
+      e.preventDefault();
       if (!Cart.items.length) {
         alert('Your ticket is empty. Tap an item to add it to the ticket.');
         return;
@@ -541,7 +582,10 @@ function bindTerminalActions() {
       document.getElementById('lbl-tender-change').textContent = '0.00';
       modalTender.classList.remove('hidden');
     };
-    closeTender.onclick = () => modalTender.classList.add('hidden');
+    closeTender.onclick = (e) => {
+      e.preventDefault();
+      modalTender.classList.add('hidden');
+    };
   }
 
   const paySelect = document.getElementById('tender-payment-method');
@@ -571,7 +615,10 @@ function bindTerminalActions() {
 
   const commitTender = document.getElementById('btn-commit-tender');
   if (commitTender) {
-    commitTender.onclick = async () => await commitSaleTransaction();
+    commitTender.onclick = async (e) => {
+      e.preventDefault();
+      await commitSaleTransaction();
+    };
   }
 }
 
