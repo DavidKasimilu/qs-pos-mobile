@@ -34,3 +34,4 @@ export const Router = {
     if (window.lucide) window.lucide.createIcons();
   },
 };
+  
