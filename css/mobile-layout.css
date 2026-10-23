@@ -14,6 +14,49 @@
   display: none !important;
 }
 
+/* Touch-friendly icon buttons (Crucial: prevents click swallowing) */
+.icon-touch-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.icon-touch-btn:active {
+  opacity: 0.65;
+}
+
+.icon-touch-btn svg,
+.icon-touch-btn i {
+  width: 24px;
+  height: 24px;
+  pointer-events: none; /* Stops the generated SVG from intercepting click events */
+}
+
+/* Trailing input toggle button */
+.trailing-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.trailing-btn svg,
+.trailing-btn i {
+  width: 20px;
+  height: 20px;
+}
+
 /* 1. Splash View */
 #screen-splash {
   justify-content: space-between;
@@ -27,22 +70,12 @@
   text-align: center;
 }
 
-.splash-logo-box {
-  border: 1.5px solid var(--primary-teal);
-  border-radius: 8px;
-  padding: 12px 24px;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--primary-teal-light);
-}
-
 /* 2. Auth Cards */
 .auth-header-bar {
   height: 56px;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 8px;
 }
 
 .auth-card-body {
@@ -61,14 +94,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 6px;
   z-index: 10;
 }
 
 .pos-top-appbar .appbar-actions {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 4px;
 }
 
 .pos-charge-bar {
@@ -114,13 +147,13 @@
 }
 
 .search-toggle-btn {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
   color: var(--text-muted);
+}
+
+.search-toggle-btn svg,
+.search-toggle-btn i {
+  width: 20px;
+  height: 20px;
 }
 
 /* Product Catalog Row Items */
@@ -155,13 +188,14 @@
   border-radius: 50%;
   background: linear-gradient(135deg, #14b8a6, #0d9488);
   color: #ffffff;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   display: flex;
   text-align: center;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
+  font-weight: 800;
   padding: 4px;
+  flex-shrink: 0;
 }
 
 /* 3-Dot Overflow Menu */
@@ -170,23 +204,30 @@
   top: 52px;
   right: 12px;
   background: #ffffff;
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  width: 170px;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  width: 180px;
   z-index: 50;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-line);
+  overflow: hidden;
 }
 
 .overflow-menu-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 14px 16px;
   font-size: 0.9rem;
   color: var(--text-main);
+  background: none;
+  border: none;
   cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
 
-.overflow-menu-item:hover,
 .overflow-menu-item:active {
   background: #f8fafc;
 }
@@ -195,7 +236,7 @@
 .side-drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
   z-index: 100;
   opacity: 0;
   pointer-events: none;
@@ -235,6 +276,8 @@
   flex: 1;
   overflow-y: auto;
   padding: 10px 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .drawer-link {
@@ -246,7 +289,11 @@
   font-size: 0.95rem;
   font-weight: 500;
   text-decoration: none;
+  background: none;
+  border: none;
   cursor: pointer;
+  width: 100%;
+  text-align: left;
 }
 
 .drawer-link:active {
@@ -257,6 +304,13 @@
   background: var(--primary-teal-light);
   color: var(--primary-teal-dark);
   font-weight: 700;
+}
+
+.drawer-link svg,
+.drawer-link i {
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
 }
 
 .drawer-footer {
