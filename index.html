@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>QS POS - Mobile</title>
+  <title>QuickSell POS Mobile</title>
   
   <link rel="manifest" href="./manifest.json" />
-  <meta name="theme-color" content="#0d35b2" />
+  <meta name="theme-color" content="#0d9488" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,15 +23,15 @@
   <section id="screen-splash" class="screen">
     <div style="height:20px;"></div>
     <div class="splash-brand-center">
-      <div class="splash-logo-box">
-        <i data-lucide="shopping-cart" style="width:32px; height:32px; color:#0d35b2;"></i>
-        <div style="text-align:left;">
-          <h1 style="font-size:1.4rem; font-weight:800; line-height:1;">SmartSell</h1>
-          <span style="font-size:0.7rem; color:var(--text-muted); letter-spacing:1px;">POINT OF SALE</span>
+      <div class="splash-logo-box" style="flex-direction:column; gap:14px; border:none; background:transparent;">
+        <img src="./assets/icon-192.png" alt="QuickSell Logo" style="width:84px; height:84px; border-radius:18px; box-shadow:0 8px 24px rgba(13,148,136,0.25);" />
+        <div style="text-align:center;">
+          <h1 style="font-size:1.6rem; font-weight:800; color:var(--text-main); letter-spacing:-0.5px;">QuickSell</h1>
+          <span style="font-size:0.75rem; color:var(--primary-teal); font-weight:700; letter-spacing:1.5px;">POINT OF SALE</span>
         </div>
       </div>
     </div>
-    <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+    <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:24px;">
       <button class="btn-primary-blue" id="btn-goto-register">Registration</button>
       <button class="btn-outline-blue" id="btn-goto-signin">Sign In</button>
     </div>
@@ -45,9 +45,9 @@
       <i data-lucide="arrow-left" class="btn-back-splash" style="cursor:pointer; width:24px; height:24px;"></i>
     </div>
     <div class="auth-card-body">
-      <div style="text-align:center; margin-bottom:30px;">
-        <i data-lucide="shopping-bag" style="width:48px; height:48px; color:#0d35b2; margin-bottom:8px;"></i>
-        <h2 style="color:var(--primary-blue); font-size:1.25rem;">SIGN IN</h2>
+      <div style="text-align:center; margin-bottom:28px;">
+        <img src="./assets/icon-192.png" alt="Logo" style="width:48px; height:48px; border-radius:12px; margin-bottom:8px;" />
+        <h2 style="color:var(--primary-teal); font-size:1.25rem; font-weight:800;">SIGN IN</h2>
       </div>
       <form id="form-mobile-login">
         <div class="form-underline-group">
@@ -63,7 +63,10 @@
             <i data-lucide="eye" class="trailing-icon" id="toggle-pwd-login"></i>
           </div>
         </div>
-        <button type="submit" class="btn-primary-blue" style="margin-top:20px;">SUBMIT</button>
+        <div style="text-align:right; margin-top:-14px; margin-bottom:20px;">
+          <a href="#" id="link-goto-forgot" style="font-size:0.8rem; color:var(--primary-teal); text-decoration:none; font-weight:600;">Forgot Password?</a>
+        </div>
+        <button type="submit" class="btn-primary-blue" id="btn-submit-login">SUBMIT</button>
       </form>
     </div>
   </section>
@@ -75,9 +78,15 @@
     <div class="auth-header-bar">
       <i data-lucide="arrow-left" class="btn-back-splash" style="cursor:pointer; width:24px; height:24px;"></i>
     </div>
-    <div class="auth-card-body">
-      <h2 style="color:var(--primary-blue); font-size:1.15rem; text-align:center; margin-bottom:24px;">REGISTRATION</h2>
+    <div class="auth-card-body" style="overflow-y:auto;">
+      <h2 style="color:var(--primary-teal); font-size:1.15rem; font-weight:800; text-align:center; margin-bottom:20px;">REGISTRATION</h2>
       <form id="form-mobile-reg">
+        <div class="form-underline-group">
+          <label>Full Name</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="reg-fullname" required autocomplete="name" />
+          </div>
+        </div>
         <div class="form-underline-group">
           <label>Email</label>
           <div class="underline-input-wrap">
@@ -99,6 +108,8 @@
               <option value="supermarket">Supermarket</option>
               <option value="restaurant">Restaurant / Bar</option>
               <option value="pharmacy">Chemist / Pharmacy</option>
+              <option value="services">Services</option>
+              <option value="other">Other Business</option>
             </select>
           </div>
         </div>
@@ -111,119 +122,206 @@
         <div class="form-underline-group">
           <label>Phone number</label>
           <div class="underline-input-wrap">
-            <input type="tel" id="reg-phone" required />
+            <input type="tel" id="reg-phone" placeholder="+254 7..." required />
           </div>
         </div>
         <div class="form-underline-group">
+          <label>Country</label>
           <div class="underline-input-wrap">
             <span style="font-size:1.1rem; margin-right:8px;">🇰🇪</span>
             <select id="reg-country" required>
-              <option value="Kenya">Kenya</option>
+              <option value="Kenya" selected>Kenya</option>
               <option value="Tanzania">Tanzania</option>
               <option value="Uganda">Uganda</option>
+              <option value="Rwanda">Rwanda</option>
+              <option value="Nigeria">Nigeria</option>
+              <option value="South Africa">South Africa</option>
+              <option value="Other">Other</option>
             </select>
           </div>
         </div>
-        <button type="submit" class="btn-primary-blue" style="margin-top:16px;">SUBMIT</button>
+        <button type="submit" class="btn-primary-blue" id="btn-submit-reg" style="margin-top:10px; margin-bottom:24px;">SUBMIT</button>
       </form>
     </div>
   </section>
 
   <!-- ===================================================================== -->
-  <!-- 4. MAIN POS TERMINAL SCREEN -->
+  <!-- 4. 8-DIGIT OTP VERIFICATION SCREEN -->
+  <!-- ===================================================================== -->
+  <section id="screen-otp" class="screen hidden">
+    <div class="auth-header-bar">
+      <i data-lucide="arrow-left" id="btn-back-otp" style="cursor:pointer; width:24px; height:24px;"></i>
+    </div>
+    <div class="auth-card-body">
+      <div style="text-align:center; margin-bottom:24px;">
+        <i data-lucide="shield-check" style="width:48px; height:48px; color:var(--primary-teal); margin-bottom:8px;"></i>
+        <h2 style="color:var(--primary-teal); font-size:1.2rem; font-weight:800;">VERIFY CODE</h2>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;">
+          Enter the 8-digit OTP sent to: <br/><strong id="lbl-otp-target-email" style="color:var(--text-main);"></strong>
+        </p>
+      </div>
+      <form id="form-mobile-otp">
+        <div class="form-underline-group">
+          <label style="text-align:center;">8-Digit Security Token</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="inp-otp-code" pattern="[0-9]{8}" maxlength="8" placeholder="12345678" style="text-align:center; font-size:1.4rem; letter-spacing:6px; font-weight:700;" required />
+          </div>
+        </div>
+        <button type="submit" class="btn-primary-blue" id="btn-verify-otp" style="margin-top:20px;">CONFIRM & LOGIN</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- 5. FORGOT PASSWORD & RECOVERY SCREENS -->
+  <!-- ===================================================================== -->
+  <section id="screen-forgot" class="screen hidden">
+    <div class="auth-header-bar">
+      <i data-lucide="arrow-left" class="btn-back-signin" style="cursor:pointer; width:24px; height:24px;"></i>
+    </div>
+    <div class="auth-card-body">
+      <h2 style="color:var(--primary-teal); font-size:1.2rem; font-weight:800; text-align:center; margin-bottom:12px;">RESET PASSWORD</h2>
+      <p style="font-size:0.82rem; color:var(--text-muted); text-align:center; margin-bottom:24px;">Enter your email address to receive a recovery code.</p>
+      <form id="form-mobile-forgot">
+        <div class="form-underline-group">
+          <label>Account Email</label>
+          <div class="underline-input-wrap">
+            <input type="email" id="forgot-email" required />
+          </div>
+        </div>
+        <button type="submit" class="btn-primary-blue" style="margin-top:16px;">SEND RESET CODE</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="screen-reset-password" class="screen hidden">
+    <div class="auth-header-bar">
+      <i data-lucide="arrow-left" class="btn-back-signin" style="cursor:pointer; width:24px; height:24px;"></i>
+    </div>
+    <div class="auth-card-body">
+      <h2 style="color:var(--primary-teal); font-size:1.2rem; font-weight:800; text-align:center; margin-bottom:20px;">NEW PASSWORD</h2>
+      <form id="form-mobile-reset-pass">
+        <div class="form-underline-group">
+          <label>8-Digit Recovery OTP</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="reset-otp-token" maxlength="8" pattern="[0-9]{8}" required style="letter-spacing:4px; text-align:center; font-weight:700;" />
+          </div>
+        </div>
+        <div class="form-underline-group">
+          <label>New Password (min 8 characters)</label>
+          <div class="underline-input-wrap">
+            <input type="password" id="reset-new-password" minlength="8" required />
+          </div>
+        </div>
+        <button type="submit" class="btn-primary-blue" style="margin-top:16px;">UPDATE & SIGN IN</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- 6. MAIN POS TERMINAL SCREEN -->
   <!-- ===================================================================== -->
   <section id="screen-pos" class="screen hidden">
     <header class="pos-top-appbar">
       <i data-lucide="menu" id="btn-open-drawer" style="cursor:pointer; width:24px; height:24px;"></i>
       <div class="appbar-actions">
-        <i data-lucide="tag" id="btn-apply-ticket-discount" style="cursor:pointer; width:20px; height:20px;"></i>
-        <i data-lucide="user-plus" id="btn-open-customer-modal" style="cursor:pointer; width:20px; height:20px;"></i>
+        <i data-lucide="tag" id="btn-apply-ticket-discount" title="Ticket Discount" style="cursor:pointer; width:20px; height:20px;"></i>
+        <i data-lucide="user-plus" id="btn-open-customer-modal" title="Customer" style="cursor:pointer; width:20px; height:20px;"></i>
         <i data-lucide="more-vertical" id="btn-open-overflow" style="cursor:pointer; width:20px; height:20px;"></i>
       </div>
     </header>
 
+    <!-- 3-Dot Overflow Popup -->
     <div id="overflow-popup" class="overflow-menu-popup hidden">
       <div class="overflow-menu-item" id="opt-clear-cart">
-        <i data-lucide="trash-2" style="width:16px; height:16px;"></i>
+        <i data-lucide="trash-2" style="width:16px; height:16px; color:var(--danger-red);"></i>
         <span>Clear items</span>
       </div>
       <div class="overflow-menu-item" id="opt-trigger-sync">
         <i data-lucide="refresh-cw" style="width:16px; height:16px;"></i>
-        <span>Sync</span>
+        <span>Sync Catalog</span>
       </div>
     </div>
 
-    <div class="pos-charge-bar" id="btn-charge-ticket">
-      <h2>CHARGE <span id="lbl-charge-amount">0.00</span></h2>
+    <!-- Green/Red Online Status Indicator Bar -->
+    <div id="connection-status-pill" style="display:none; font-size:0.75rem; text-align:center; padding:3px 0; background:#fef3c7; color:#92400e; font-weight:700;">
+      Offline Mode - Storing sales locally
     </div>
 
+    <!-- Full-Width Charge Bar -->
+    <div class="pos-charge-bar" id="btn-charge-ticket">
+      <h2>CHARGE <span id="lbl-charge-amount">0.00</span> <span id="lbl-pos-currency" style="font-size:0.8rem;">KES</span></h2>
+    </div>
+
+    <!-- Category & Search Subbar -->
     <div class="pos-filter-subbar">
       <div class="category-dropdown-wrap">
         <select id="sel-pos-category">
-          <option value="all">All</option>
+          <option value="all">All Items</option>
         </select>
       </div>
       <div class="search-toggle-btn" id="btn-toggle-search">
         <i data-lucide="search" style="width:18px; height:18px;"></i>
       </div>
     </div>
+    
+    <!-- Collapsible Search Input -->
+    <div id="search-input-wrap" class="hidden" style="padding:8px 14px; background:#fff; border-bottom:1px solid var(--border-line);">
+      <input type="text" id="inp-pos-search" placeholder="Search by name, SKU or scan barcode..." style="width:100%; padding:8px; border:1px solid var(--border-line); border-radius:4px; outline:none;" />
+    </div>
 
+    <!-- Product Rows List -->
     <main class="pos-product-list" id="pos-items-container">
-      <!-- Catalog items load here -->
+      <p style="padding:24px; text-align:center; color:var(--text-muted); font-size:0.9rem;">Loading catalog...</p>
     </main>
   </section>
 
   <!-- ===================================================================== -->
-  <!-- 5. SIDE DRAWER NAVIGATION -->
+  <!-- 7. SIDE NAVIGATION DRAWER -->
   <!-- ===================================================================== -->
   <div class="side-drawer-backdrop" id="drawer-backdrop"></div>
   <aside class="side-drawer" id="side-drawer">
     <div class="drawer-header">
-      <h3 style="font-size:1.1rem; font-weight:700;" id="drawer-user-role">admin</h3>
-      <span style="font-size:0.75rem; opacity:0.85;" id="drawer-device-id">POS 01</span>
+      <h3 style="font-size:1.15rem; font-weight:800;" id="drawer-user-role">ADMIN</h3>
+      <span style="font-size:0.8rem; opacity:0.9;" id="drawer-shop-name">Main Branch</span><br/>
+      <span style="font-size:0.7rem; opacity:0.75; font-family:monospace;" id="drawer-device-id">POS-01</span>
     </div>
     <nav class="drawer-menu-links">
-      <a class="drawer-link active" data-view="pos">
+      <a class="drawer-link active" data-nav="pos">
         <i data-lucide="credit-card"></i> New Sale
       </a>
-      <a class="drawer-link" data-view="orders">
-        <i data-lucide="receipt"></i> Manage Sales
-      </a>
-      <a class="drawer-link" data-view="products">
-        <i data-lucide="package"></i> Products
-      </a>
-      <a class="drawer-link" data-view="inventory">
-        <i data-lucide="truck"></i> Inventory
-      </a>
-      <a class="drawer-link" data-view="settings">
-        <i data-lucide="settings"></i> Settings
+      <a class="drawer-link" data-nav="sync">
+        <i data-lucide="refresh-cw"></i> Sync Database
       </a>
       <div style="border-top:1px solid #e2e8f0; margin:10px 0;"></div>
-      <a class="drawer-link" id="link-goto-backoffice" style="color:#0d35b2; font-weight:700;">
-        <i data-lucide="monitor"></i> Back Office
+      <a class="drawer-link" id="link-goto-backoffice" style="color:var(--primary-teal); font-weight:700;">
+        <i data-lucide="monitor"></i> Back Office Portal
+      </a>
+      <a class="drawer-link" id="btn-drawer-logout" style="color:var(--danger-red); margin-top:auto;">
+        <i data-lucide="log-out"></i> Log Out
       </a>
     </nav>
     <div class="drawer-footer">
-      <span id="lbl-app-serial">SL38352292 | V. 1.114.9 | 2154</span>
+      <span id="lbl-app-serial">QuickSell Mobile v1.0</span>
     </div>
   </aside>
 
   <!-- ===================================================================== -->
-  <!-- 6. ITEM CUSTOMIZER MODAL -->
+  <!-- 8. ITEM CUSTOMIZER MODAL -->
   <!-- ===================================================================== -->
   <div id="modal-item-customizer" class="screen hidden" style="background:#ffffff; z-index:200;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
-      <i data-lucide="x" id="btn-close-customizer" style="cursor:pointer;"></i>
-      <h3 id="customizer-item-name" style="font-size:1rem; font-weight:700;">Charger</h3>
-      <span id="btn-confirm-item-add" style="color:#0d35b2; font-weight:700; cursor:pointer;">ADD</span>
+      <i data-lucide="x" id="btn-close-customizer" style="cursor:pointer; width:22px; height:22px;"></i>
+      <h3 id="customizer-item-name" style="font-size:1rem; font-weight:700;">Item</h3>
+      <span id="btn-confirm-item-add" style="color:var(--primary-teal); font-weight:700; cursor:pointer;">ADD</span>
     </div>
     <div style="padding:20px;">
       <div style="margin-bottom:24px;">
         <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:8px;">Quantity</label>
         <div style="display:flex; align-items:center; gap:16px;">
-          <button style="width:40px; height:40px; background:#f1f5f9; border:none; font-size:1.2rem; cursor:pointer;" id="btn-qty-minus">-</button>
-          <input type="number" id="inp-custom-qty" value="1" style="flex:1; text-align:center; border:none; border-bottom:1px solid #cbd5e1; font-size:1.1rem; padding:4px;" />
-          <button style="width:40px; height:40px; background:#f1f5f9; border:none; font-size:1.2rem; cursor:pointer;" id="btn-qty-plus">+</button>
+          <button style="width:44px; height:44px; background:#f1f5f9; border:none; font-size:1.3rem; border-radius:4px; cursor:pointer;" id="btn-qty-minus">-</button>
+          <input type="number" id="inp-custom-qty" value="1" min="1" step="any" style="flex:1; text-align:center; border:none; border-bottom:1.5px solid var(--border-line); font-size:1.2rem; font-weight:700; padding:6px;" />
+          <button style="width:44px; height:44px; background:#f1f5f9; border:none; font-size:1.3rem; border-radius:4px; cursor:pointer;" id="btn-qty-plus">+</button>
         </div>
       </div>
       <div class="form-underline-group">
@@ -233,19 +331,89 @@
         </div>
       </div>
       <div class="form-underline-group">
-        <label>Discount</label>
+        <label>Line Discount</label>
         <div class="underline-input-wrap" style="display:flex; align-items:center;">
-          <button type="button" id="btn-disc-mode-fixed" style="padding:4px 8px; border:none; background:#f1f5f9; font-weight:700;">$</button>
+          <button type="button" id="btn-disc-mode-fixed" style="padding:6px 12px; border:none; background:#f1f5f9; font-weight:700; border-radius:3px;">VAL</button>
           <input type="number" step="0.01" id="inp-custom-discount" value="0.00" style="flex:1; margin:0 8px;" />
-          <button type="button" id="btn-disc-mode-pct" style="padding:4px 8px; border:none; background:#dbeafe; color:#0d35b2; font-weight:700;">%</button>
+          <button type="button" id="btn-disc-mode-pct" style="padding:6px 12px; border:none; background:var(--primary-teal-light); color:var(--primary-teal); font-weight:700; border-radius:3px;">%</button>
         </div>
       </div>
       <div class="form-underline-group">
-        <label>Remark</label>
+        <label>Remark / Notes</label>
         <div class="underline-input-wrap">
-          <input type="text" id="inp-custom-remark" />
+          <input type="text" id="inp-custom-remark" placeholder="e.g. Extra hot" />
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 9. CUSTOMER SELECTOR MODAL -->
+  <!-- ===================================================================== -->
+  <div id="modal-customer" class="screen hidden" style="background:#ffffff; z-index:200;">
+    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
+      <i data-lucide="x" id="btn-close-customer" style="cursor:pointer; width:22px; height:22px;"></i>
+      <h3 style="font-size:1rem; font-weight:700;">Select Customer</h3>
+      <div style="width:22px;"></div>
+    </div>
+    <div style="padding:14px; border-bottom:1px solid #f1f5f9;">
+      <input type="text" id="inp-search-customer" placeholder="Search customer by name or phone..." style="width:100%; padding:10px; border:1px solid var(--border-line); border-radius:4px;" />
+    </div>
+    <div style="padding:12px; text-align:center; border-bottom:1px solid #f1f5f9;">
+      <button class="btn-outline-blue" id="btn-show-add-customer" style="height:38px; font-size:0.85rem;">+ ADD NEW CUSTOMER</button>
+    </div>
+    <div id="customer-list-wrap" style="flex:1; overflow-y:auto; padding:10px 14px;"></div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 10. TENDER / PAYMENT MODAL -->
+  <!-- ===================================================================== -->
+  <div id="modal-tender" class="screen hidden" style="background:#ffffff; z-index:200; overflow-y:auto;">
+    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
+      <i data-lucide="x" id="btn-close-tender" style="cursor:pointer; width:22px; height:22px;"></i>
+      <h3 style="font-size:1rem; font-weight:700;">Checkout Tender</h3>
+      <div style="width:22px;"></div>
+    </div>
+    <div style="padding:20px;">
+      <div style="text-align:center; padding:16px; background:var(--primary-teal-light); border-radius:8px; margin-bottom:20px;">
+        <span style="font-size:0.85rem; color:var(--primary-teal-dark); font-weight:600;">Total Payable</span>
+        <h2 id="tender-grand-total" style="font-size:2rem; font-weight:800; color:var(--primary-teal-deep); margin-top:4px;">0.00</h2>
+      </div>
+
+      <div class="form-underline-group">
+        <label>Payment Method</label>
+        <div class="underline-input-wrap">
+          <select id="tender-payment-method">
+            <option value="cash">Cash Tender</option>
+            <option value="mpesa">M-PESA (Till / Paybill)</option>
+            <option value="card">Card Terminal</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="tender-cash-fields">
+        <div class="form-underline-group">
+          <label>Cash Received</label>
+          <div class="underline-input-wrap">
+            <input type="number" step="0.01" id="inp-tender-cash-paid" style="font-size:1.3rem; font-weight:700;" />
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:12px; background:#f8fafc; border-radius:6px; margin-bottom:20px;">
+          <span style="color:var(--text-muted); font-size:0.9rem;">Change Return:</span>
+          <strong id="lbl-tender-change" style="font-size:1.1rem; color:var(--primary-teal);">0.00</strong>
+        </div>
+      </div>
+
+      <div id="tender-ref-fields" class="hidden">
+        <div class="form-underline-group">
+          <label>M-PESA / Auth Reference Code</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="inp-tender-ref-code" placeholder="e.g. QK891829" />
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary-blue" id="btn-commit-tender">COMPLETE SALE</button>
     </div>
   </div>
 

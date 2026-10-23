@@ -2,7 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { CONFIG } from './config.js';
 import { IDB } from './idb.js';
 
-// Initialize Supabase Client through the Cloudflare Worker Gateway
+// Initialize Supabase through the Cloudflare Worker Edge Proxy
 export const supabase = createClient(CONFIG.GATEWAY_URL, 'public-anon-key', {
   auth: {
     persistSession: true,
@@ -15,7 +15,6 @@ export const Auth = {
   currentProfile: null,
   currentShop: null,
 
-  // 1. Session Synchronizer (Runs on Boot)
   async syncSession() {
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
@@ -25,7 +24,7 @@ export const Auth = {
 
       this.currentUser = session.user;
 
-      // Fetch profile & assigned shop context
+      // 1. Fetch user profile and assigned shop details
       const { data: profile } = await supabase
         .from('profiles')
         .select('*, shops(*)')
@@ -35,30 +34,31 @@ export const Auth = {
       if (profile) {
         this.currentProfile = profile;
         this.currentShop = profile.shops;
+      } else {
+        // Fallback for new admin signups
+        const { data: fallbackShop } = await supabase.from('shops').select('*').limit(1).maybeSingle();
+        this.currentShop = fallbackShop;
+      }
 
-        // Cache catalog locally to IndexedDB for offline operation
-        this.refreshLocalCatalog(profile.shop_id);
+      // 2. Refresh local IndexedDB catalog with current shop products
+      if (this.currentShop?.id) {
+        await this.refreshLocalCatalog(this.currentShop.id);
       }
 
       return { user: this.currentUser, profile: this.currentProfile, shop: this.currentShop };
     } catch (err) {
-      console.warn('Session sync offline fallback:', err);
+      console.warn('Using offline cached session data:', err);
       return null;
     }
   },
 
-  // 2. Sign In With Credentials
   async signIn(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     await this.syncSession();
     return data;
   },
 
-  // 3. Register New Account (Includes Business Details & Provisions Shop)
   async signUp(email, password, fullName, businessName, businessType, phone, country) {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -77,8 +77,7 @@ export const Auth = {
     return data;
   },
 
-  // 4. Verify 8-Digit OTP Code
-  async verifyOTP(email, token) {
+  async verifySignUpOTP(email, token) {
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token,
@@ -89,22 +88,46 @@ export const Auth = {
     return data;
   },
 
-  // 5. Download Fresh Catalog into IndexedDB
+  async requestPasswordReset(email) {
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) throw error;
+    return data;
+  },
+
+  async verifyPasswordResetOTP(email, token) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'recovery',
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async updatePassword(newPassword) {
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    return data;
+  },
+
   async refreshLocalCatalog(shopId) {
     if (!navigator.onLine || !shopId) return;
 
-    const { data: products } = await supabase
-      .from('products')
-      .select('*')
-      .eq('shop_id', shopId)
-      .eq('is_active', true);
+    try {
+      const [prodRes, catRes, custRes] = await Promise.all([
+        supabase.from('products').select('*').eq('shop_id', shopId).eq('is_active', true),
+        supabase.from('categories').select('*'),
+        supabase.from('customers').select('*').eq('shop_id', shopId),
+      ]);
 
-    if (products && products.length) {
-      await IDB.setCatalog(products);
+      if (prodRes.data) await IDB.setCatalog(prodRes.data);
+      if (catRes.data) await IDB.setCategories(catRes.data);
+      if (custRes.data) await IDB.setCustomers(custRes.data);
+    } catch (err) {
+      console.warn('Catalog refresh deferred (offline):', err.message);
     }
   },
 
-  // 6. Sign Out
   async signOut() {
     await supabase.auth.signOut();
     this.currentUser = null;
