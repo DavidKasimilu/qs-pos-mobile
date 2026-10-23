@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>QS POS - Mobile</title>
+  
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0d35b2" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  
+  <link rel="stylesheet" href="./css/mobile-theme.css" />
+  <link rel="stylesheet" href="./css/mobile-layout.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <!-- ===================================================================== -->
+  <!-- 1. SPLASH / ENTRY SCREEN -->
+  <!-- ===================================================================== -->
+  <section id="screen-splash" class="screen">
+    <div style="height:20px;"></div>
+    <div class="splash-brand-center">
+      <div class="splash-logo-box">
+        <i data-lucide="shopping-cart" style="width:32px; height:32px; color:#0d35b2;"></i>
+        <div style="text-align:left;">
+          <h1 style="font-size:1.4rem; font-weight:800; line-height:1;">SmartSell</h1>
+          <span style="font-size:0.7rem; color:var(--text-muted); letter-spacing:1px;">POINT OF SALE</span>
+        </div>
+      </div>
+    </div>
+    <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+      <button class="btn-primary-blue" id="btn-goto-register">Registration</button>
+      <button class="btn-outline-blue" id="btn-goto-signin">Sign In</button>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- 2. SIGN IN SCREEN -->
+  <!-- ===================================================================== -->
+  <section id="screen-signin" class="screen hidden">
+    <div class="auth-header-bar">
+      <i data-lucide="arrow-left" class="btn-back-splash" style="cursor:pointer; width:24px; height:24px;"></i>
+    </div>
+    <div class="auth-card-body">
+      <div style="text-align:center; margin-bottom:30px;">
+        <i data-lucide="shopping-bag" style="width:48px; height:48px; color:#0d35b2; margin-bottom:8px;"></i>
+        <h2 style="color:var(--primary-blue); font-size:1.25rem;">SIGN IN</h2>
+      </div>
+      <form id="form-mobile-login">
+        <div class="form-underline-group">
+          <label>Email</label>
+          <div class="underline-input-wrap">
+            <input type="email" id="login-email" required autocomplete="email" />
+          </div>
+        </div>
+        <div class="form-underline-group">
+          <label>Password</label>
+          <div class="underline-input-wrap">
+            <input type="password" id="login-password" required autocomplete="current-password" />
+            <i data-lucide="eye" class="trailing-icon" id="toggle-pwd-login"></i>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary-blue" style="margin-top:20px;">SUBMIT</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- 3. REGISTRATION SCREEN -->
+  <!-- ===================================================================== -->
+  <section id="screen-register" class="screen hidden">
+    <div class="auth-header-bar">
+      <i data-lucide="arrow-left" class="btn-back-splash" style="cursor:pointer; width:24px; height:24px;"></i>
+    </div>
+    <div class="auth-card-body">
+      <h2 style="color:var(--primary-blue); font-size:1.15rem; text-align:center; margin-bottom:24px;">REGISTRATION</h2>
+      <form id="form-mobile-reg">
+        <div class="form-underline-group">
+          <label>Email</label>
+          <div class="underline-input-wrap">
+            <input type="email" id="reg-email" required autocomplete="email" />
+          </div>
+        </div>
+        <div class="form-underline-group">
+          <label>Password</label>
+          <div class="underline-input-wrap">
+            <input type="password" id="reg-password" required minlength="8" />
+            <i data-lucide="eye" class="trailing-icon" id="toggle-pwd-reg"></i>
+          </div>
+        </div>
+        <div class="form-underline-group">
+          <label>Select your business type</label>
+          <div class="underline-input-wrap">
+            <select id="reg-biz-type" required>
+              <option value="retail">Retail Store</option>
+              <option value="supermarket">Supermarket</option>
+              <option value="restaurant">Restaurant / Bar</option>
+              <option value="pharmacy">Chemist / Pharmacy</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-underline-group">
+          <label>Business name</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="reg-biz-name" required />
+          </div>
+        </div>
+        <div class="form-underline-group">
+          <label>Phone number</label>
+          <div class="underline-input-wrap">
+            <input type="tel" id="reg-phone" required />
+          </div>
+        </div>
+        <div class="form-underline-group">
+          <div class="underline-input-wrap">
+            <span style="font-size:1.1rem; margin-right:8px;">🇰🇪</span>
+            <select id="reg-country" required>
+              <option value="Kenya">Kenya</option>
+              <option value="Tanzania">Tanzania</option>
+              <option value="Uganda">Uganda</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary-blue" style="margin-top:16px;">SUBMIT</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- 4. MAIN POS TERMINAL SCREEN -->
+  <!-- ===================================================================== -->
+  <section id="screen-pos" class="screen hidden">
+    <header class="pos-top-appbar">
+      <i data-lucide="menu" id="btn-open-drawer" style="cursor:pointer; width:24px; height:24px;"></i>
+      <div class="appbar-actions">
+        <i data-lucide="tag" id="btn-apply-ticket-discount" style="cursor:pointer; width:20px; height:20px;"></i>
+        <i data-lucide="user-plus" id="btn-open-customer-modal" style="cursor:pointer; width:20px; height:20px;"></i>
+        <i data-lucide="more-vertical" id="btn-open-overflow" style="cursor:pointer; width:20px; height:20px;"></i>
+      </div>
+    </header>
+
+    <div id="overflow-popup" class="overflow-menu-popup hidden">
+      <div class="overflow-menu-item" id="opt-clear-cart">
+        <i data-lucide="trash-2" style="width:16px; height:16px;"></i>
+        <span>Clear items</span>
+      </div>
+      <div class="overflow-menu-item" id="opt-trigger-sync">
+        <i data-lucide="refresh-cw" style="width:16px; height:16px;"></i>
+        <span>Sync</span>
+      </div>
+    </div>
+
+    <div class="pos-charge-bar" id="btn-charge-ticket">
+      <h2>CHARGE <span id="lbl-charge-amount">0.00</span></h2>
+    </div>
+
+    <div class="pos-filter-subbar">
+      <div class="category-dropdown-wrap">
+        <select id="sel-pos-category">
+          <option value="all">All</option>
+        </select>
+      </div>
+      <div class="search-toggle-btn" id="btn-toggle-search">
+        <i data-lucide="search" style="width:18px; height:18px;"></i>
+      </div>
+    </div>
+
+    <main class="pos-product-list" id="pos-items-container">
+      <!-- Catalog items load here -->
+    </main>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- 5. SIDE DRAWER NAVIGATION -->
+  <!-- ===================================================================== -->
+  <div class="side-drawer-backdrop" id="drawer-backdrop"></div>
+  <aside class="side-drawer" id="side-drawer">
+    <div class="drawer-header">
+      <h3 style="font-size:1.1rem; font-weight:700;" id="drawer-user-role">admin</h3>
+      <span style="font-size:0.75rem; opacity:0.85;" id="drawer-device-id">POS 01</span>
+    </div>
+    <nav class="drawer-menu-links">
+      <a class="drawer-link active" data-view="pos">
+        <i data-lucide="credit-card"></i> New Sale
+      </a>
+      <a class="drawer-link" data-view="orders">
+        <i data-lucide="receipt"></i> Manage Sales
+      </a>
+      <a class="drawer-link" data-view="products">
+        <i data-lucide="package"></i> Products
+      </a>
+      <a class="drawer-link" data-view="inventory">
+        <i data-lucide="truck"></i> Inventory
+      </a>
+      <a class="drawer-link" data-view="settings">
+        <i data-lucide="settings"></i> Settings
+      </a>
+      <div style="border-top:1px solid #e2e8f0; margin:10px 0;"></div>
+      <a class="drawer-link" id="link-goto-backoffice" style="color:#0d35b2; font-weight:700;">
+        <i data-lucide="monitor"></i> Back Office
+      </a>
+    </nav>
+    <div class="drawer-footer">
+      <span id="lbl-app-serial">SL38352292 | V. 1.114.9 | 2154</span>
+    </div>
+  </aside>
+
+  <!-- ===================================================================== -->
+  <!-- 6. ITEM CUSTOMIZER MODAL -->
+  <!-- ===================================================================== -->
+  <div id="modal-item-customizer" class="screen hidden" style="background:#ffffff; z-index:200;">
+    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
+      <i data-lucide="x" id="btn-close-customizer" style="cursor:pointer;"></i>
+      <h3 id="customizer-item-name" style="font-size:1rem; font-weight:700;">Charger</h3>
+      <span id="btn-confirm-item-add" style="color:#0d35b2; font-weight:700; cursor:pointer;">ADD</span>
+    </div>
+    <div style="padding:20px;">
+      <div style="margin-bottom:24px;">
+        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:8px;">Quantity</label>
+        <div style="display:flex; align-items:center; gap:16px;">
+          <button style="width:40px; height:40px; background:#f1f5f9; border:none; font-size:1.2rem; cursor:pointer;" id="btn-qty-minus">-</button>
+          <input type="number" id="inp-custom-qty" value="1" style="flex:1; text-align:center; border:none; border-bottom:1px solid #cbd5e1; font-size:1.1rem; padding:4px;" />
+          <button style="width:40px; height:40px; background:#f1f5f9; border:none; font-size:1.2rem; cursor:pointer;" id="btn-qty-plus">+</button>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Unit Price</label>
+        <div class="underline-input-wrap">
+          <input type="number" step="0.01" id="inp-custom-price" />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Discount</label>
+        <div class="underline-input-wrap" style="display:flex; align-items:center;">
+          <button type="button" id="btn-disc-mode-fixed" style="padding:4px 8px; border:none; background:#f1f5f9; font-weight:700;">$</button>
+          <input type="number" step="0.01" id="inp-custom-discount" value="0.00" style="flex:1; margin:0 8px;" />
+          <button type="button" id="btn-disc-mode-pct" style="padding:4px 8px; border:none; background:#dbeafe; color:#0d35b2; font-weight:700;">%</button>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Remark</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="inp-custom-remark" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
