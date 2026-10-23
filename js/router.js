@@ -10,6 +10,10 @@ export const Router = {
       forgot: document.getElementById('screen-forgot'),
       'reset-password': document.getElementById('screen-reset-password'),
       pos: document.getElementById('screen-pos'),
+      sales: document.getElementById('screen-sales'),
+      products: document.getElementById('screen-products'),
+      inventory: document.getElementById('screen-inventory'),
+      settings: document.getElementById('screen-settings'),
     };
 
     window.addEventListener('popstate', (e) => {
@@ -27,9 +31,7 @@ export const Router = {
     if (pushHistory) {
       try {
         history.pushState({ view: viewName }, '', `#${viewName}`);
-      } catch (e) {
-        // Fallback for sandboxed or restricted frames
-      }
+      } catch (e) {}
     }
 
     this.renderView(viewName);
@@ -51,4 +53,3 @@ export const Router = {
     }
   },
 };
-                            
