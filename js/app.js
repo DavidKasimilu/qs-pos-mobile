@@ -11,32 +11,35 @@ let customDiscountMode = 'pct';
 let productsList = [];
 let categoriesList = [];
 
-// =========================================================================
-// Primary Bootstrap (Guaranteed Synchronous Event Binding)
-// =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
-  // 1. Initialize Views and Icons
+  // 1. Mount Views & Lucide Icons
   Router.init();
   if (window.lucide) window.lucide.createIcons();
 
-  // 2. Bind DOM Handlers Immediately
+  // 2. Bind DOM Interactions Immediately
   bindNavigationEvents();
   bindAuthFlows();
   bindTerminalActions();
 
-  // 3. Register Service Worker
+  // 3. Initialize Service Worker & IndexedDB Storage
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.warn);
   }
 
-  // 4. Initialize Local IndexedDB
   try {
     await IDB.init();
   } catch (err) {
-    console.warn('[IDB] Local storage fallback:', err);
+    console.warn('[IDB] Local storage initialization warning:', err);
   }
 
-  // 5. Check Active Authentication Session
+  // 4. Background Sync Listener
+  const statusPill = document.getElementById('connection-status-pill');
+  SyncEngine.init((isOnline) => {
+    if (statusPill) statusPill.style.display = isOnline ? 'none' : 'block';
+  });
+  if (statusPill) statusPill.style.display = navigator.onLine ? 'none' : 'block';
+
+  // 5. Session Validation
   try {
     const session = await Auth.syncSession();
     if (session?.user) {
@@ -45,13 +48,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       Router.navigate('splash', false);
     }
   } catch (err) {
-    console.warn('[Auth] Running in offline / unauthenticated mode:', err);
+    console.warn('[Auth] Running in unauthenticated mode:', err);
     Router.navigate('splash', false);
   }
 });
 
 // =========================================================================
-// Navigation & Transition Handlers (Guaranteed Clicks)
+// Navigation & Transition Handlers
 // =========================================================================
 function bindNavigationEvents() {
   const gotoSignin = document.getElementById('btn-goto-signin');
@@ -70,7 +73,6 @@ function bindNavigationEvents() {
     };
   }
 
-  // All Back Buttons to Splash
   document.querySelectorAll('.btn-back-splash').forEach((btn) => {
     btn.onclick = (e) => {
       e.preventDefault();
@@ -78,7 +80,6 @@ function bindNavigationEvents() {
     };
   });
 
-  // Back to Signin
   document.querySelectorAll('.btn-back-signin').forEach((btn) => {
     btn.onclick = (e) => {
       e.preventDefault();
@@ -86,7 +87,6 @@ function bindNavigationEvents() {
     };
   });
 
-  // Back from OTP
   const backOtp = document.getElementById('btn-back-otp');
   if (backOtp) {
     backOtp.onclick = (e) => {
@@ -117,20 +117,23 @@ function bootTerminal() {
 }
 
 // =========================================================================
-// Catalog Fetching (IndexedDB with Cloud Fallback)
+// Catalog Fetching & Rendering
 // =========================================================================
 async function loadCatalogData() {
   const catSelect = document.getElementById('sel-pos-category');
 
+  // Load from local cache first
   productsList = await IDB.getCatalog();
   categoriesList = await IDB.getCategories();
 
+  // If local catalog is empty and network is online, refresh from Supabase
   if (!productsList.length && navigator.onLine && Auth.currentShop?.id) {
     await Auth.refreshLocalCatalog(Auth.currentShop.id);
     productsList = await IDB.getCatalog();
     categoriesList = await IDB.getCategories();
   }
 
+  // Populate category dropdown
   if (catSelect) {
     catSelect.innerHTML = `<option value="all">All Items</option>` +
       categoriesList.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -144,32 +147,49 @@ function renderProductRows(items) {
   if (!container) return;
 
   if (!items || !items.length) {
-    container.innerHTML = `<p style="padding:40px 20px; text-align:center; color:var(--text-muted); font-size:0.9rem;">No products found in this branch catalog.</p>`;
+    container.innerHTML = `
+      <div style="padding:48px 24px; text-align:center; color:var(--text-muted);">
+        <i data-lucide="package-open" style="width:40px; height:40px; margin:0 auto 12px; display:block; opacity:0.4;"></i>
+        <p style="font-size:0.95rem; font-weight:600;">No items found</p>
+        <p style="font-size:0.8rem; margin-top:4px;">Use the overflow menu (⋮) to Sync Catalog from your database.</p>
+      </div>
+    `;
+    if (window.lucide) window.lucide.createIcons({ root: container });
     return;
   }
 
-  container.innerHTML = items.map((item) => `
-    <div class="product-list-row" data-id="${item.id}">
-      <div class="product-row-left">
-        <div class="product-row-circle">
-          ${item.name.slice(0, 2).toUpperCase()}
+  container.innerHTML = items.map((item) => {
+    const rawPrice = item.retail_price ?? item.price ?? 0;
+    const price = Number(rawPrice).toFixed(2);
+    const stock = item.stock_quantity ?? item.stock ?? null;
+    const initials = (item.name || 'QS').slice(0, 2).toUpperCase();
+
+    return `
+      <div class="product-list-row" data-id="${item.id}">
+        <div class="product-row-left">
+          <div class="product-row-circle">
+            ${initials}
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:0.95rem; color:var(--text-main);">${item.name || 'Unnamed Item'}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">
+              ${stock !== null ? `${stock} In Stock` : (item.sku ? `SKU: ${item.sku}` : 'Standard Item')}
+            </div>
+          </div>
         </div>
-        <div>
-          <div style="font-weight:700; font-size:0.95rem; color:var(--text-main);">${item.name}</div>
-          <div style="font-size:0.75rem; color:var(--text-muted);">${item.sku || 'SKU: -'}</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-weight:700; font-size:0.95rem; color:var(--primary-teal-dark);">
+            ${price}
+          </span>
+          <i data-lucide="info" style="width:18px; height:18px; color:var(--text-muted);"></i>
         </div>
       </div>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-weight:700; font-size:0.95rem; color:var(--primary-teal-dark);">
-          ${Number(item.retail_price).toFixed(2)}
-        </span>
-        <i data-lucide="info" style="width:18px; height:18px; color:var(--text-muted);"></i>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   if (window.lucide) window.lucide.createIcons({ root: container });
 
+  // Bind click on each product row to open the customizer
   container.querySelectorAll('.product-list-row').forEach((row) => {
     row.onclick = () => {
       const found = items.find((p) => p.id === row.dataset.id);
@@ -179,7 +199,7 @@ function renderProductRows(items) {
 }
 
 // =========================================================================
-// Authentication Execution (8-Digit OTP & Password Reset)
+// Authentication Execution
 // =========================================================================
 function bindAuthFlows() {
   const wireToggle = (btnId, inpId) => {
@@ -192,7 +212,7 @@ function bindAuthFlows() {
   wireToggle('toggle-pwd-login', 'login-password');
   wireToggle('toggle-pwd-reg', 'reg-password');
 
-  // 1. Sign In
+  // Sign In
   const formLogin = document.getElementById('form-mobile-login');
   if (formLogin) {
     formLogin.onsubmit = async (e) => {
@@ -216,7 +236,7 @@ function bindAuthFlows() {
     };
   }
 
-  // 2. Registration (8-Digit OTP via Brevo)
+  // Registration
   const formReg = document.getElementById('form-mobile-reg');
   if (formReg) {
     formReg.onsubmit = async (e) => {
@@ -248,7 +268,7 @@ function bindAuthFlows() {
     };
   }
 
-  // 3. Confirm 8-Digit OTP
+  // 8-Digit OTP
   const formOtp = document.getElementById('form-mobile-otp');
   if (formOtp) {
     formOtp.onsubmit = async (e) => {
@@ -271,7 +291,7 @@ function bindAuthFlows() {
     };
   }
 
-  // 4. Password Recovery
+  // Forgot Password
   const linkForgot = document.getElementById('link-goto-forgot');
   if (linkForgot) {
     linkForgot.onclick = (e) => {
@@ -319,6 +339,7 @@ function bindAuthFlows() {
 // Terminal Operations: Drawer, Customizer, Customer & Tender
 // =========================================================================
 function bindTerminalActions() {
+  // Drawer
   const drawer = document.getElementById('side-drawer');
   const backdrop = document.getElementById('drawer-backdrop');
   const openDrawer = document.getElementById('btn-open-drawer');
@@ -334,6 +355,21 @@ function bindTerminalActions() {
     };
   }
 
+  // Drawer Nav Links
+  document.querySelectorAll('.drawer-link[data-nav]').forEach((link) => {
+    link.onclick = async () => {
+      const target = link.dataset.nav;
+      drawer.classList.remove('active');
+      backdrop.classList.remove('active');
+
+      if (target === 'pos') {
+        Router.navigate('pos');
+      } else if (target === 'sync') {
+        await syncEverything();
+      }
+    };
+  });
+
   const backOfficeLink = document.getElementById('link-goto-backoffice');
   if (backOfficeLink) {
     backOfficeLink.onclick = () => window.open(CONFIG.BACKOFFICE_URL, '_blank');
@@ -346,7 +382,7 @@ function bindTerminalActions() {
     };
   }
 
-  // Overflow 3-Dot Menu
+  // 3-Dot Overflow Menu
   const overflow = document.getElementById('overflow-popup');
   const openOverflow = document.getElementById('btn-open-overflow');
   if (openOverflow && overflow) {
@@ -371,14 +407,23 @@ function bindTerminalActions() {
   if (optSync) {
     optSync.onclick = async () => {
       if (overflow) overflow.classList.add('hidden');
-      await Auth.refreshLocalCatalog(Auth.currentShop?.id);
-      await loadCatalogData();
-      await SyncEngine.syncPendingData();
-      alert('Catalog and sales synchronized.');
+      await syncEverything();
     };
   }
 
-  // Search Toggle
+  // Ticket Discount Tag Icon
+  const ticketDiscBtn = document.getElementById('btn-apply-ticket-discount');
+  if (ticketDiscBtn) {
+    ticketDiscBtn.onclick = () => {
+      const curDiscount = Cart.ticketDiscount || 0;
+      const entered = prompt('Enter order discount amount (in KES):', curDiscount > 0 ? curDiscount : '');
+      if (entered !== null) {
+        Cart.setTicketDiscount(entered);
+      }
+    };
+  }
+
+  // Search Toggle & Filtering
   const searchWrap = document.getElementById('search-input-wrap');
   const searchInput = document.getElementById('inp-pos-search');
   const toggleSearch = document.getElementById('btn-toggle-search');
@@ -393,7 +438,10 @@ function bindTerminalActions() {
       const cat = document.getElementById('sel-pos-category').value;
       const filtered = productsList.filter((p) => {
         const matchCat = cat === 'all' || p.category_id === cat;
-        const matchText = !term || p.name.toLowerCase().includes(term) || (p.barcode && p.barcode.includes(term));
+        const matchText = !term || 
+          (p.name && p.name.toLowerCase().includes(term)) || 
+          (p.barcode && p.barcode.toLowerCase().includes(term)) ||
+          (p.sku && p.sku.toLowerCase().includes(term));
         return matchCat && matchText;
       });
       renderProductRows(filtered);
@@ -404,7 +452,7 @@ function bindTerminalActions() {
     if (catSelect) catSelect.onchange = filterCatalog;
   }
 
-  // Customizer Modal
+  // Line Customizer Modal
   const modalCust = document.getElementById('modal-item-customizer');
   const closeCust = document.getElementById('btn-close-customizer');
   if (closeCust && modalCust) {
@@ -416,11 +464,11 @@ function bindTerminalActions() {
   if (qtyMinus && qtyPlus) {
     qtyMinus.onclick = () => {
       const inp = document.getElementById('inp-custom-qty');
-      inp.value = Math.max(1, parseFloat(inp.value || 1) - 1);
+      inp.value = Math.max(1, (parseFloat(inp.value) || 1) - 1);
     };
     qtyPlus.onclick = () => {
       const inp = document.getElementById('inp-custom-qty');
-      inp.value = parseFloat(inp.value || 1) + 1;
+      inp.value = (parseFloat(inp.value) || 1) + 1;
     };
   }
 
@@ -430,12 +478,16 @@ function bindTerminalActions() {
     discFixed.onclick = () => {
       customDiscountMode = 'fixed';
       discFixed.style.background = 'var(--primary-teal-light)';
+      discFixed.style.color = 'var(--primary-teal-dark)';
       discPct.style.background = '#f1f5f9';
+      discPct.style.color = 'var(--text-main)';
     };
     discPct.onclick = () => {
       customDiscountMode = 'pct';
       discPct.style.background = 'var(--primary-teal-light)';
+      discPct.style.color = 'var(--primary-teal-dark)';
       discFixed.style.background = '#f1f5f9';
+      discFixed.style.color = 'var(--text-main)';
     };
   }
 
@@ -465,6 +517,14 @@ function bindTerminalActions() {
     closeCustList.onclick = () => modalCustList.classList.add('hidden');
   }
 
+  const searchCustInput = document.getElementById('inp-search-customer');
+  if (searchCustInput) {
+    searchCustInput.oninput = () => {
+      const query = searchCustInput.value.toLowerCase().trim();
+      renderCustomerList(query);
+    };
+  }
+
   // Tender Checkout Modal
   const modalTender = document.getElementById('modal-tender');
   const chargeBtn = document.getElementById('btn-charge-ticket');
@@ -472,7 +532,7 @@ function bindTerminalActions() {
   if (chargeBtn && modalTender && closeTender) {
     chargeBtn.onclick = () => {
       if (!Cart.items.length) {
-        alert('Your ticket is empty.');
+        alert('Your ticket is empty. Tap an item to add it to the ticket.');
         return;
       }
       const totals = Cart.getTotals();
@@ -515,33 +575,57 @@ function bindTerminalActions() {
   }
 }
 
+// =========================================================================
+// Helpers: Item Customizer, Customer List, & Sync
+// =========================================================================
 function openItemCustomizer(product) {
   currentCustomizingProduct = product;
   const modal = document.getElementById('modal-item-customizer');
-  document.getElementById('customizer-item-name').textContent = product.name;
-  document.getElementById('inp-custom-price').value = Number(product.retail_price).toFixed(2);
+  const rawPrice = product.retail_price ?? product.price ?? 0;
+
+  document.getElementById('customizer-item-name').textContent = product.name || 'Custom Item';
+  document.getElementById('inp-custom-price').value = Number(rawPrice).toFixed(2);
   document.getElementById('inp-custom-qty').value = 1;
   document.getElementById('inp-custom-discount').value = '0.00';
   document.getElementById('inp-custom-remark').value = '';
+
+  // Reset to percentage default
+  customDiscountMode = 'pct';
+  const discFixed = document.getElementById('btn-disc-mode-fixed');
+  const discPct = document.getElementById('btn-disc-mode-pct');
+  if (discFixed && discPct) {
+    discPct.style.background = 'var(--primary-teal-light)';
+    discPct.style.color = 'var(--primary-teal-dark)';
+    discFixed.style.background = '#f1f5f9';
+    discFixed.style.color = 'var(--text-main)';
+  }
+
   modal.classList.remove('hidden');
 }
 
-async function renderCustomerList() {
+async function renderCustomerList(filterText = '') {
   const container = document.getElementById('customer-list-wrap');
-  const customers = await IDB.getCustomers();
+  let customers = await IDB.getCustomers();
+
+  if (filterText) {
+    customers = customers.filter((c) => 
+      (c.name && c.name.toLowerCase().includes(filterText)) ||
+      (c.phone && c.phone.includes(filterText))
+    );
+  }
 
   if (!customers.length) {
-    container.innerHTML = `<p style="padding:20px; text-align:center; color:var(--text-muted);">No customers saved.</p>`;
+    container.innerHTML = `<p style="padding:24px; text-align:center; color:var(--text-muted); font-size:0.85rem;">No customers found.</p>`;
     return;
   }
 
   container.innerHTML = customers.map((c) => `
-    <div class="product-list-row" data-cust-id="${c.id}" style="padding:10px 0;">
+    <div class="product-list-row" data-cust-id="${c.id}" style="padding:12px 0;">
       <div>
-        <strong>${c.name}</strong>
-        <div style="font-size:0.75rem; color:var(--text-muted);">${c.phone || 'No phone'}</div>
+        <strong style="color:var(--text-main); font-size:0.95rem;">${c.name}</strong>
+        <div style="font-size:0.75rem; color:var(--text-muted);">${c.phone || 'No phone recorded'}</div>
       </div>
-      <button type="button" class="btn-outline-blue" style="height:32px; font-size:0.75rem; width:auto; padding:0 12px;">SELECT</button>
+      <button type="button" class="btn-outline-blue" style="height:32px; font-size:0.75rem; width:auto; padding:0 14px;">SELECT</button>
     </div>
   `).join('');
 
@@ -549,15 +633,39 @@ async function renderCustomerList() {
     row.onclick = () => {
       const cust = customers.find((c) => c.id === row.dataset.custId);
       Cart.selectedCustomer = cust;
-      alert(`Customer '${cust.name}' attached to ticket.`);
+      alert(`Customer '${cust.name}' attached to current ticket.`);
       document.getElementById('modal-customer').classList.add('hidden');
     };
   });
 }
 
+async function syncEverything() {
+  if (!navigator.onLine) {
+    alert('Device is currently offline. Connect to the internet to sync catalog and orders.');
+    return;
+  }
+
+  try {
+    await Auth.refreshLocalCatalog(Auth.currentShop?.id);
+    await loadCatalogData();
+    await SyncEngine.syncPendingData();
+    alert('Catalog and pending sales synchronized successfully.');
+  } catch (err) {
+    alert('Sync encountered an issue: ' + err.message);
+  }
+}
+
+// =========================================================================
+// Commit Sale Transaction
+// =========================================================================
 async function commitSaleTransaction() {
+  const commitBtn = document.getElementById('btn-commit-tender');
+  commitBtn.disabled = true;
+  commitBtn.textContent = 'PROCESSING...';
+
   const totals = Cart.getTotals();
   const paymentMethod = document.getElementById('tender-payment-method').value;
+  const refCode = document.getElementById('inp-tender-ref-code').value.trim();
   const receiptNo = `QS-M-${Date.now().toString().slice(-7)}`;
   const orderId = crypto.randomUUID();
 
@@ -584,13 +692,14 @@ async function commitSaleTransaction() {
       order_id: orderId,
       payment_method: paymentMethod,
       amount: totals.grandTotal,
+      reference_code: refCode || null,
     }],
     created_at: new Date().toISOString(),
   };
 
-  if (navigator.onLine) {
-    try {
-      await supabase.from('orders').insert([{
+  try {
+    if (navigator.onLine) {
+      const { error: orderErr } = await supabase.from('orders').insert([{
         id: orderPayload.id,
         shop_id: orderPayload.shop_id,
         cashier_id: orderPayload.cashier_id,
@@ -604,17 +713,30 @@ async function commitSaleTransaction() {
         synced_from_offline: false,
       }]);
 
-      await supabase.from('order_items').insert(orderPayload.items);
-      await supabase.from('payments').insert(orderPayload.payments);
-    } catch (err) {
-      console.warn('Network write failed, saving to offline queue:', err);
+      if (orderErr) throw orderErr;
+
+      if (orderPayload.items.length) {
+        await supabase.from('order_items').insert(orderPayload.items);
+      }
+      if (orderPayload.payments.length) {
+        await supabase.from('payments').insert(orderPayload.payments);
+      }
+    } else {
+      // Offline mode: store sale locally
       await IDB.saveOfflineOrder(orderPayload);
     }
-  } else {
-    await IDB.saveOfflineOrder(orderPayload);
-  }
 
-  alert(`Sale committed successfully! Receipt: ${receiptNo}`);
-  document.getElementById('modal-tender').classList.add('hidden');
-  Cart.clearTicket(false);
-    }
+    alert(`Sale completed! Receipt No: ${receiptNo}`);
+    document.getElementById('modal-tender').classList.add('hidden');
+    Cart.clearTicket(false);
+  } catch (err) {
+    console.warn('Network transaction write failed, queued locally:', err);
+    await IDB.saveOfflineOrder(orderPayload);
+    alert(`Network unavailable. Sale queued locally! Receipt No: ${receiptNo}`);
+    document.getElementById('modal-tender').classList.add('hidden');
+    Cart.clearTicket(false);
+  } finally {
+    commitBtn.disabled = false;
+    commitBtn.textContent = 'COMPLETE SALE';
+  }
+}
