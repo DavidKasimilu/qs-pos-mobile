@@ -7,61 +7,121 @@ import { Cart } from './cart.js';
 
 let pendingEmail = '';
 let currentCustomizingProduct = null;
-let customDiscountMode = 'pct'; // 'pct' | 'fixed'
+let customDiscountMode = 'pct';
 let productsList = [];
 let categoriesList = [];
 
+// =========================================================================
+// Primary Bootstrap (Guaranteed Synchronous Event Binding)
+// =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Initialize Views and Icons
   Router.init();
   if (window.lucide) window.lucide.createIcons();
 
-  // 1. Initialize IndexedDB
-  await IDB.init();
+  // 2. Bind DOM Handlers Immediately
+  bindNavigationEvents();
+  bindAuthFlows();
+  bindTerminalActions();
 
-  // 2. Service Worker for Offline PWA
+  // 3. Register Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.warn);
   }
 
-  // 3. Online/Offline UI listener
-  const statusPill = document.getElementById('connection-status-pill');
-  SyncEngine.init((isOnline) => {
-    statusPill.style.display = isOnline ? 'none' : 'block';
-  });
-
-  // 4. Session Validation
-  const session = await Auth.syncSession();
-  if (session?.user) {
-    bootTerminal();
-  } else {
-    Router.navigate('splash');
+  // 4. Initialize Local IndexedDB
+  try {
+    await IDB.init();
+  } catch (err) {
+    console.warn('[IDB] Local storage fallback:', err);
   }
 
-  // Bind UI Handlers
-  bindAuthFlows();
-  bindTerminalActions();
+  // 5. Check Active Authentication Session
+  try {
+    const session = await Auth.syncSession();
+    if (session?.user) {
+      bootTerminal();
+    } else {
+      Router.navigate('splash', false);
+    }
+  } catch (err) {
+    console.warn('[Auth] Running in offline / unauthenticated mode:', err);
+    Router.navigate('splash', false);
+  }
 });
 
+// =========================================================================
+// Navigation & Transition Handlers (Guaranteed Clicks)
+// =========================================================================
+function bindNavigationEvents() {
+  const gotoSignin = document.getElementById('btn-goto-signin');
+  if (gotoSignin) {
+    gotoSignin.onclick = (e) => {
+      e.preventDefault();
+      Router.navigate('signin');
+    };
+  }
+
+  const gotoRegister = document.getElementById('btn-goto-register');
+  if (gotoRegister) {
+    gotoRegister.onclick = (e) => {
+      e.preventDefault();
+      Router.navigate('register');
+    };
+  }
+
+  // All Back Buttons to Splash
+  document.querySelectorAll('.btn-back-splash').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      Router.navigate('splash');
+    };
+  });
+
+  // Back to Signin
+  document.querySelectorAll('.btn-back-signin').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      Router.navigate('signin');
+    };
+  });
+
+  // Back from OTP
+  const backOtp = document.getElementById('btn-back-otp');
+  if (backOtp) {
+    backOtp.onclick = (e) => {
+      e.preventDefault();
+      Router.navigate('register');
+    };
+  }
+}
+
+// =========================================================================
+// Terminal Initializer
+// =========================================================================
 function bootTerminal() {
   const shop = Auth.currentShop;
   Cart.init(shop?.id);
 
-  document.getElementById('lbl-pos-currency').textContent = shop?.currency || 'KES';
-  document.getElementById('drawer-user-role').textContent = (Auth.currentProfile?.role || 'CASHIER').toUpperCase();
-  document.getElementById('drawer-shop-name').textContent = shop?.name || 'QuickSell Terminal';
+  const currencyEl = document.getElementById('lbl-pos-currency');
+  if (currencyEl) currencyEl.textContent = shop?.currency || 'KES';
+
+  const roleEl = document.getElementById('drawer-user-role');
+  if (roleEl) roleEl.textContent = (Auth.currentProfile?.role || 'CASHIER').toUpperCase();
+
+  const shopEl = document.getElementById('drawer-shop-name');
+  if (shopEl) shopEl.textContent = shop?.name || 'QuickSell Terminal';
 
   Router.navigate('pos');
   loadCatalogData();
 }
 
 // =========================================================================
-// Real Catalog Fetching (IndexedDB with Cloud Fallback)
+// Catalog Fetching (IndexedDB with Cloud Fallback)
 // =========================================================================
 async function loadCatalogData() {
-  const container = document.getElementById('pos-items-container');
   const catSelect = document.getElementById('sel-pos-category');
 
-  // Load from local IndexedDB
   productsList = await IDB.getCatalog();
   categoriesList = await IDB.getCategories();
 
@@ -71,18 +131,19 @@ async function loadCatalogData() {
     categoriesList = await IDB.getCategories();
   }
 
-  // Render Category Select options
-  catSelect.innerHTML = `<option value="all">All Items</option>` +
-    categoriesList.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  if (catSelect) {
+    catSelect.innerHTML = `<option value="all">All Items</option>` +
+      categoriesList.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
 
   renderProductRows(productsList);
 }
 
 function renderProductRows(items) {
   const container = document.getElementById('pos-items-container');
-  const currency = Auth.currentShop?.currency || 'KES';
+  if (!container) return;
 
-  if (!items.length) {
+  if (!items || !items.length) {
     container.innerHTML = `<p style="padding:40px 20px; text-align:center; color:var(--text-muted); font-size:0.9rem;">No products found in this branch catalog.</p>`;
     return;
   }
@@ -118,16 +179,9 @@ function renderProductRows(items) {
 }
 
 // =========================================================================
-// Authentication & 8-Digit OTP Flow
+// Authentication Execution (8-Digit OTP & Password Reset)
 // =========================================================================
 function bindAuthFlows() {
-  document.getElementById('btn-goto-signin').onclick = () => Router.navigate('signin');
-  document.getElementById('btn-goto-register').onclick = () => Router.navigate('register');
-  document.querySelectorAll('.btn-back-splash').forEach((b) => b.onclick = () => Router.navigate('splash'));
-  document.querySelectorAll('.btn-back-signin').forEach((b) => b.onclick = () => Router.navigate('signin'));
-  document.getElementById('btn-back-otp').onclick = () => Router.navigate('register');
-
-  // Toggle Passwords
   const wireToggle = (btnId, inpId) => {
     const btn = document.getElementById(btnId);
     const inp = document.getElementById(inpId);
@@ -138,259 +192,327 @@ function bindAuthFlows() {
   wireToggle('toggle-pwd-login', 'login-password');
   wireToggle('toggle-pwd-reg', 'reg-password');
 
-  // Sign In Submission
-  document.getElementById('form-mobile-login').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btn-submit-login');
-    btn.disabled = true;
-    btn.textContent = 'SIGNING IN...';
+  // 1. Sign In
+  const formLogin = document.getElementById('form-mobile-login');
+  if (formLogin) {
+    formLogin.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-login');
+      btn.disabled = true;
+      btn.textContent = 'SIGNING IN...';
 
-    const email = document.getElementById('login-email').value.trim();
-    const pwd = document.getElementById('login-password').value;
+      const email = document.getElementById('login-email').value.trim();
+      const pwd = document.getElementById('login-password').value;
 
-    try {
-      await Auth.signIn(email, pwd);
-      bootTerminal();
-    } catch (err) {
-      alert(err.message || 'Invalid email or password.');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'SUBMIT';
-    }
-  };
+      try {
+        await Auth.signIn(email, pwd);
+        bootTerminal();
+      } catch (err) {
+        alert(err.message || 'Invalid email or password.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'SUBMIT';
+      }
+    };
+  }
 
-  // Registration Submission (Dispatches 8-Digit OTP)
-  document.getElementById('form-mobile-reg').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btn-submit-reg');
-    btn.disabled = true;
-    btn.textContent = 'DISPATCHING CODE...';
+  // 2. Registration (8-Digit OTP via Brevo)
+  const formReg = document.getElementById('form-mobile-reg');
+  if (formReg) {
+    formReg.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-reg');
+      btn.disabled = true;
+      btn.textContent = 'DISPATCHING CODE...';
 
-    const fullName = document.getElementById('reg-fullname').value.trim();
-    const email = document.getElementById('reg-email').value.trim();
-    const password = document.getElementById('reg-password').value;
-    const bizName = document.getElementById('reg-biz-name').value.trim();
-    const bizType = document.getElementById('reg-biz-type').value;
-    const phone = document.getElementById('reg-phone').value.trim();
-    const country = document.getElementById('reg-country').value;
+      const fullName = document.getElementById('reg-fullname').value.trim();
+      const email = document.getElementById('reg-email').value.trim();
+      const password = document.getElementById('reg-password').value;
+      const bizName = document.getElementById('reg-biz-name').value.trim();
+      const bizType = document.getElementById('reg-biz-type').value;
+      const phone = document.getElementById('reg-phone').value.trim();
+      const country = document.getElementById('reg-country').value;
 
-    try {
-      await Auth.signUp(email, password, fullName, bizName, bizType, phone, country);
-      pendingEmail = email;
-      document.getElementById('lbl-otp-target-email').textContent = email;
-      Router.navigate('otp');
-    } catch (err) {
-      alert(err.message || 'Registration failed.');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'SUBMIT';
-    }
-  };
+      try {
+        await Auth.signUp(email, password, fullName, bizName, bizType, phone, country);
+        pendingEmail = email;
+        const targetEmailEl = document.getElementById('lbl-otp-target-email');
+        if (targetEmailEl) targetEmailEl.textContent = email;
+        Router.navigate('otp');
+      } catch (err) {
+        alert(err.message || 'Registration failed.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'SUBMIT';
+      }
+    };
+  }
 
-  // Confirm 8-Digit Registration OTP
-  document.getElementById('form-mobile-otp').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btn-verify-otp');
-    btn.disabled = true;
-    btn.textContent = 'VERIFYING...';
+  // 3. Confirm 8-Digit OTP
+  const formOtp = document.getElementById('form-mobile-otp');
+  if (formOtp) {
+    formOtp.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-verify-otp');
+      btn.disabled = true;
+      btn.textContent = 'VERIFYING...';
 
-    const token = document.getElementById('inp-otp-code').value.trim();
+      const token = document.getElementById('inp-otp-code').value.trim();
 
-    try {
-      await Auth.verifySignUpOTP(pendingEmail, token);
-      bootTerminal();
-    } catch (err) {
-      alert(err.message || 'Invalid or expired 8-digit OTP code.');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'CONFIRM & LOGIN';
-    }
-  };
+      try {
+        await Auth.verifySignUpOTP(pendingEmail, token);
+        bootTerminal();
+      } catch (err) {
+        alert(err.message || 'Invalid or expired 8-digit OTP code.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'CONFIRM & LOGIN';
+      }
+    };
+  }
 
-  // Forgot Password Transitions
-  document.getElementById('link-goto-forgot').onclick = (e) => {
-    e.preventDefault();
-    Router.navigate('forgot');
-  };
+  // 4. Password Recovery
+  const linkForgot = document.getElementById('link-goto-forgot');
+  if (linkForgot) {
+    linkForgot.onclick = (e) => {
+      e.preventDefault();
+      Router.navigate('forgot');
+    };
+  }
 
-  document.getElementById('form-mobile-forgot').onsubmit = async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('forgot-email').value.trim();
-    try {
-      await Auth.requestPasswordReset(email);
-      pendingEmail = email;
-      alert('Password reset OTP sent to your inbox.');
-      Router.navigate('reset-password');
-    } catch (err) {
-      alert(err.message);
-    }
-  };
+  const formForgot = document.getElementById('form-mobile-forgot');
+  if (formForgot) {
+    formForgot.onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('forgot-email').value.trim();
+      try {
+        await Auth.requestPasswordReset(email);
+        pendingEmail = email;
+        alert('Password recovery OTP sent to your email.');
+        Router.navigate('reset-password');
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+  }
 
-  document.getElementById('form-mobile-reset-pass').onsubmit = async (e) => {
-    e.preventDefault();
-    const token = document.getElementById('reset-otp-token').value.trim();
-    const newPass = document.getElementById('reset-new-password').value;
+  const formResetPass = document.getElementById('form-mobile-reset-pass');
+  if (formResetPass) {
+    formResetPass.onsubmit = async (e) => {
+      e.preventDefault();
+      const token = document.getElementById('reset-otp-token').value.trim();
+      const newPass = document.getElementById('reset-new-password').value;
 
-    try {
-      await Auth.verifyPasswordResetOTP(pendingEmail, token);
-      await Auth.updatePassword(newPass);
-      alert('Password updated. Please log in.');
-      Router.navigate('signin');
-    } catch (err) {
-      alert(err.message || 'Failed to reset password.');
-    }
-  };
+      try {
+        await Auth.verifyPasswordResetOTP(pendingEmail, token);
+        await Auth.updatePassword(newPass);
+        alert('Password reset successfully. Please sign in.');
+        Router.navigate('signin');
+      } catch (err) {
+        alert(err.message || 'Reset verification failed.');
+      }
+    };
+  }
 }
 
 // =========================================================================
-// Terminal Operations: Customizer, Search, Drawer & Tender
+// Terminal Operations: Drawer, Customizer, Customer & Tender
 // =========================================================================
 function bindTerminalActions() {
-  // 1. Drawer
   const drawer = document.getElementById('side-drawer');
   const backdrop = document.getElementById('drawer-backdrop');
-  document.getElementById('btn-open-drawer').onclick = () => {
-    drawer.classList.add('active');
-    backdrop.classList.add('active');
-  };
-  backdrop.onclick = () => {
-    drawer.classList.remove('active');
-    backdrop.classList.remove('active');
-  };
-  document.getElementById('link-goto-backoffice').onclick = () => {
-    window.open(CONFIG.BACKOFFICE_URL, '_blank');
-  };
-  document.getElementById('btn-drawer-logout').onclick = async () => {
-    if (confirm('Log out of QuickSell POS?')) await Auth.signOut();
-  };
+  const openDrawer = document.getElementById('btn-open-drawer');
+  
+  if (openDrawer && drawer && backdrop) {
+    openDrawer.onclick = () => {
+      drawer.classList.add('active');
+      backdrop.classList.add('active');
+    };
+    backdrop.onclick = () => {
+      drawer.classList.remove('active');
+      backdrop.classList.remove('active');
+    };
+  }
 
-  // 2. Overflow Menu
+  const backOfficeLink = document.getElementById('link-goto-backoffice');
+  if (backOfficeLink) {
+    backOfficeLink.onclick = () => window.open(CONFIG.BACKOFFICE_URL, '_blank');
+  }
+
+  const logoutBtn = document.getElementById('btn-drawer-logout');
+  if (logoutBtn) {
+    logoutBtn.onclick = async () => {
+      if (confirm('Log out of QuickSell POS?')) await Auth.signOut();
+    };
+  }
+
+  // Overflow 3-Dot Menu
   const overflow = document.getElementById('overflow-popup');
-  document.getElementById('btn-open-overflow').onclick = (e) => {
-    e.stopPropagation();
-    overflow.classList.toggle('hidden');
-  };
-  window.addEventListener('click', () => overflow.classList.add('hidden'));
+  const openOverflow = document.getElementById('btn-open-overflow');
+  if (openOverflow && overflow) {
+    openOverflow.onclick = (e) => {
+      e.stopPropagation();
+      overflow.classList.toggle('hidden');
+    };
+    window.addEventListener('click', () => overflow.classList.add('hidden'));
+  }
 
-  document.getElementById('opt-clear-cart').onclick = () => {
-    if (confirm('Clear current sale items?')) {
-      Cart.clearTicket(true);
-      overflow.classList.add('hidden');
-    }
-  };
+  const optClear = document.getElementById('opt-clear-cart');
+  if (optClear) {
+    optClear.onclick = () => {
+      if (confirm('Clear current ticket items?')) {
+        Cart.clearTicket(true);
+        if (overflow) overflow.classList.add('hidden');
+      }
+    };
+  }
 
-  document.getElementById('opt-trigger-sync').onclick = async () => {
-    overflow.classList.add('hidden');
-    await Auth.refreshLocalCatalog(Auth.currentShop?.id);
-    await loadCatalogData();
-    await SyncEngine.syncPendingData();
-    alert('Catalog and pending orders synchronized.');
-  };
+  const optSync = document.getElementById('opt-trigger-sync');
+  if (optSync) {
+    optSync.onclick = async () => {
+      if (overflow) overflow.classList.add('hidden');
+      await Auth.refreshLocalCatalog(Auth.currentShop?.id);
+      await loadCatalogData();
+      await SyncEngine.syncPendingData();
+      alert('Catalog and sales synchronized.');
+    };
+  }
 
-  // 3. Search and Category Filters
+  // Search Toggle
   const searchWrap = document.getElementById('search-input-wrap');
   const searchInput = document.getElementById('inp-pos-search');
-  document.getElementById('btn-toggle-search').onclick = () => {
-    searchWrap.classList.toggle('hidden');
-    if (!searchWrap.classList.contains('hidden')) searchInput.focus();
-  };
+  const toggleSearch = document.getElementById('btn-toggle-search');
+  if (toggleSearch && searchWrap && searchInput) {
+    toggleSearch.onclick = () => {
+      searchWrap.classList.toggle('hidden');
+      if (!searchWrap.classList.contains('hidden')) searchInput.focus();
+    };
 
-  const filterCatalog = () => {
-    const term = searchInput.value.toLowerCase().trim();
-    const cat = document.getElementById('sel-pos-category').value;
-    const filtered = productsList.filter((p) => {
-      const matchCat = cat === 'all' || p.category_id === cat;
-      const matchText = !term || p.name.toLowerCase().includes(term) || (p.barcode && p.barcode.includes(term));
-      return matchCat && matchText;
-    });
-    renderProductRows(filtered);
-  };
+    const filterCatalog = () => {
+      const term = searchInput.value.toLowerCase().trim();
+      const cat = document.getElementById('sel-pos-category').value;
+      const filtered = productsList.filter((p) => {
+        const matchCat = cat === 'all' || p.category_id === cat;
+        const matchText = !term || p.name.toLowerCase().includes(term) || (p.barcode && p.barcode.includes(term));
+        return matchCat && matchText;
+      });
+      renderProductRows(filtered);
+    };
 
-  searchInput.oninput = filterCatalog;
-  document.getElementById('sel-pos-category').onchange = filterCatalog;
+    searchInput.oninput = filterCatalog;
+    const catSelect = document.getElementById('sel-pos-category');
+    if (catSelect) catSelect.onchange = filterCatalog;
+  }
 
-  // 4. Line Customizer Modal
+  // Customizer Modal
   const modalCust = document.getElementById('modal-item-customizer');
-  document.getElementById('btn-close-customizer').onclick = () => modalCust.classList.add('hidden');
+  const closeCust = document.getElementById('btn-close-customizer');
+  if (closeCust && modalCust) {
+    closeCust.onclick = () => modalCust.classList.add('hidden');
+  }
 
-  document.getElementById('btn-qty-minus').onclick = () => {
-    const inp = document.getElementById('inp-custom-qty');
-    inp.value = Math.max(1, parseFloat(inp.value || 1) - 1);
-  };
-  document.getElementById('btn-qty-plus').onclick = () => {
-    const inp = document.getElementById('inp-custom-qty');
-    inp.value = parseFloat(inp.value || 1) + 1;
-  };
+  const qtyMinus = document.getElementById('btn-qty-minus');
+  const qtyPlus = document.getElementById('btn-qty-plus');
+  if (qtyMinus && qtyPlus) {
+    qtyMinus.onclick = () => {
+      const inp = document.getElementById('inp-custom-qty');
+      inp.value = Math.max(1, parseFloat(inp.value || 1) - 1);
+    };
+    qtyPlus.onclick = () => {
+      const inp = document.getElementById('inp-custom-qty');
+      inp.value = parseFloat(inp.value || 1) + 1;
+    };
+  }
 
-  document.getElementById('btn-disc-mode-fixed').onclick = () => {
-    customDiscountMode = 'fixed';
-    document.getElementById('btn-disc-mode-fixed').style.background = 'var(--primary-teal-light)';
-    document.getElementById('btn-disc-mode-pct').style.background = '#f1f5f9';
-  };
-  document.getElementById('btn-disc-mode-pct').onclick = () => {
-    customDiscountMode = 'pct';
-    document.getElementById('btn-disc-mode-pct').style.background = 'var(--primary-teal-light)';
-    document.getElementById('btn-disc-mode-fixed').style.background = '#f1f5f9';
-  };
+  const discFixed = document.getElementById('btn-disc-mode-fixed');
+  const discPct = document.getElementById('btn-disc-mode-pct');
+  if (discFixed && discPct) {
+    discFixed.onclick = () => {
+      customDiscountMode = 'fixed';
+      discFixed.style.background = 'var(--primary-teal-light)';
+      discPct.style.background = '#f1f5f9';
+    };
+    discPct.onclick = () => {
+      customDiscountMode = 'pct';
+      discPct.style.background = 'var(--primary-teal-light)';
+      discFixed.style.background = '#f1f5f9';
+    };
+  }
 
-  document.getElementById('btn-confirm-item-add').onclick = () => {
-    if (!currentCustomizingProduct) return;
-    const qty = parseFloat(document.getElementById('inp-custom-qty').value) || 1;
-    const price = parseFloat(document.getElementById('inp-custom-price').value) || 0;
-    const disc = parseFloat(document.getElementById('inp-custom-discount').value) || 0;
-    const remark = document.getElementById('inp-custom-remark').value.trim();
+  const confirmAdd = document.getElementById('btn-confirm-item-add');
+  if (confirmAdd && modalCust) {
+    confirmAdd.onclick = () => {
+      if (!currentCustomizingProduct) return;
+      const qty = parseFloat(document.getElementById('inp-custom-qty').value) || 1;
+      const price = parseFloat(document.getElementById('inp-custom-price').value) || 0;
+      const disc = parseFloat(document.getElementById('inp-custom-discount').value) || 0;
+      const remark = document.getElementById('inp-custom-remark').value.trim();
 
-    Cart.addItem(currentCustomizingProduct, qty, price, disc, customDiscountMode, remark);
-    modalCust.classList.add('hidden');
-  };
+      Cart.addItem(currentCustomizingProduct, qty, price, disc, customDiscountMode, remark);
+      modalCust.classList.add('hidden');
+    };
+  }
 
-  // 5. Customer Selector Modal
+  // Customer Selector Modal
   const modalCustList = document.getElementById('modal-customer');
-  document.getElementById('btn-open-customer-modal').onclick = async () => {
-    modalCustList.classList.remove('hidden');
-    renderCustomerList();
-  };
-  document.getElementById('btn-close-customer').onclick = () => modalCustList.classList.add('hidden');
+  const openCust = document.getElementById('btn-open-customer-modal');
+  const closeCustList = document.getElementById('btn-close-customer');
+  if (openCust && modalCustList && closeCustList) {
+    openCust.onclick = () => {
+      modalCustList.classList.remove('hidden');
+      renderCustomerList();
+    };
+    closeCustList.onclick = () => modalCustList.classList.add('hidden');
+  }
 
-  // 6. Tender Checkout Modal
+  // Tender Checkout Modal
   const modalTender = document.getElementById('modal-tender');
-  document.getElementById('btn-charge-ticket').onclick = () => {
-    if (!Cart.items.length) {
-      alert('Your ticket is empty.');
-      return;
-    }
-    const totals = Cart.getTotals();
-    document.getElementById('tender-grand-total').textContent = totals.grandTotal.toFixed(2);
-    document.getElementById('inp-tender-cash-paid').value = totals.grandTotal.toFixed(2);
-    document.getElementById('lbl-tender-change').textContent = '0.00';
-    modalTender.classList.remove('hidden');
-  };
-  document.getElementById('btn-close-tender').onclick = () => modalTender.classList.add('hidden');
+  const chargeBtn = document.getElementById('btn-charge-ticket');
+  const closeTender = document.getElementById('btn-close-tender');
+  if (chargeBtn && modalTender && closeTender) {
+    chargeBtn.onclick = () => {
+      if (!Cart.items.length) {
+        alert('Your ticket is empty.');
+        return;
+      }
+      const totals = Cart.getTotals();
+      document.getElementById('tender-grand-total').textContent = totals.grandTotal.toFixed(2);
+      document.getElementById('inp-tender-cash-paid').value = totals.grandTotal.toFixed(2);
+      document.getElementById('lbl-tender-change').textContent = '0.00';
+      modalTender.classList.remove('hidden');
+    };
+    closeTender.onclick = () => modalTender.classList.add('hidden');
+  }
 
   const paySelect = document.getElementById('tender-payment-method');
   const cashFields = document.getElementById('tender-cash-fields');
   const refFields = document.getElementById('tender-ref-fields');
   const cashPaidInput = document.getElementById('inp-tender-cash-paid');
 
-  paySelect.onchange = () => {
-    if (paySelect.value === 'cash') {
-      cashFields.classList.remove('hidden');
-      refFields.classList.add('hidden');
-    } else {
-      cashFields.classList.add('hidden');
-      refFields.classList.remove('hidden');
-    }
-  };
+  if (paySelect && cashFields && refFields) {
+    paySelect.onchange = () => {
+      if (paySelect.value === 'cash') {
+        cashFields.classList.remove('hidden');
+        refFields.classList.add('hidden');
+      } else {
+        cashFields.classList.add('hidden');
+        refFields.classList.remove('hidden');
+      }
+    };
+  }
 
-  cashPaidInput.oninput = () => {
-    const paid = parseFloat(cashPaidInput.value) || 0;
-    const total = Cart.getTotals().grandTotal;
-    document.getElementById('lbl-tender-change').textContent = Math.max(0, paid - total).toFixed(2);
-  };
+  if (cashPaidInput) {
+    cashPaidInput.oninput = () => {
+      const paid = parseFloat(cashPaidInput.value) || 0;
+      const total = Cart.getTotals().grandTotal;
+      document.getElementById('lbl-tender-change').textContent = Math.max(0, paid - total).toFixed(2);
+    };
+  }
 
-  document.getElementById('btn-commit-tender').onclick = async () => {
-    await commitSaleTransaction();
-  };
+  const commitTender = document.getElementById('btn-commit-tender');
+  if (commitTender) {
+    commitTender.onclick = async () => await commitSaleTransaction();
+  }
 }
 
 function openItemCustomizer(product) {
@@ -419,7 +541,7 @@ async function renderCustomerList() {
         <strong>${c.name}</strong>
         <div style="font-size:0.75rem; color:var(--text-muted);">${c.phone || 'No phone'}</div>
       </div>
-      <button class="btn-outline-blue" style="height:32px; font-size:0.75rem; width:auto; padding:0 12px;">SELECT</button>
+      <button type="button" class="btn-outline-blue" style="height:32px; font-size:0.75rem; width:auto; padding:0 12px;">SELECT</button>
     </div>
   `).join('');
 
@@ -433,9 +555,6 @@ async function renderCustomerList() {
   });
 }
 
-// =========================================================================
-// Commit Transaction (Instant Offline Queue or Direct Supabase Write)
-// =========================================================================
 async function commitSaleTransaction() {
   const totals = Cart.getTotals();
   const paymentMethod = document.getElementById('tender-payment-method').value;
@@ -492,12 +611,10 @@ async function commitSaleTransaction() {
       await IDB.saveOfflineOrder(orderPayload);
     }
   } else {
-    // Offline mode: store sale locally
     await IDB.saveOfflineOrder(orderPayload);
   }
 
   alert(`Sale committed successfully! Receipt: ${receiptNo}`);
   document.getElementById('modal-tender').classList.add('hidden');
   Cart.clearTicket(false);
-      }
-        
+    }
