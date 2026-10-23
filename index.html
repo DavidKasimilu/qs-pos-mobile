@@ -42,8 +42,8 @@
   <!-- ===================================================================== -->
   <section id="screen-signin" class="screen hidden">
     <div class="auth-header-bar">
-      <button type="button" class="btn-back-splash" style="background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center;">
-        <i data-lucide="arrow-left" style="width:24px; height:24px; color:var(--text-main);"></i>
+      <button type="button" class="icon-touch-btn btn-back-splash" aria-label="Go Back">
+        <i data-lucide="arrow-left"></i>
       </button>
     </div>
     <div class="auth-card-body">
@@ -62,7 +62,9 @@
           <label>Password</label>
           <div class="underline-input-wrap">
             <input type="password" id="login-password" required autocomplete="current-password" />
-            <i data-lucide="eye" class="trailing-icon" id="toggle-pwd-login"></i>
+            <button type="button" class="icon-touch-btn trailing-btn" id="toggle-pwd-login" aria-label="Toggle Password Visibility">
+              <i data-lucide="eye"></i>
+            </button>
           </div>
         </div>
         <div style="text-align:right; margin-top:-14px; margin-bottom:20px;">
@@ -78,8 +80,8 @@
   <!-- ===================================================================== -->
   <section id="screen-register" class="screen hidden">
     <div class="auth-header-bar">
-      <button type="button" class="btn-back-splash" style="background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center;">
-        <i data-lucide="arrow-left" style="width:24px; height:24px; color:var(--text-main);"></i>
+      <button type="button" class="icon-touch-btn btn-back-splash" aria-label="Go Back">
+        <i data-lucide="arrow-left"></i>
       </button>
     </div>
     <div class="auth-card-body" style="overflow-y:auto;">
@@ -101,7 +103,9 @@
           <label>Password</label>
           <div class="underline-input-wrap">
             <input type="password" id="reg-password" required minlength="8" />
-            <i data-lucide="eye" class="trailing-icon" id="toggle-pwd-reg"></i>
+            <button type="button" class="icon-touch-btn trailing-btn" id="toggle-pwd-reg" aria-label="Toggle Password Visibility">
+              <i data-lucide="eye"></i>
+            </button>
           </div>
         </div>
         <div class="form-underline-group">
@@ -154,8 +158,8 @@
   <!-- ===================================================================== -->
   <section id="screen-otp" class="screen hidden">
     <div class="auth-header-bar">
-      <button type="button" id="btn-back-otp" style="background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center;">
-        <i data-lucide="arrow-left" style="width:24px; height:24px; color:var(--text-main);"></i>
+      <button type="button" class="icon-touch-btn" id="btn-back-otp" aria-label="Go Back">
+        <i data-lucide="arrow-left"></i>
       </button>
     </div>
     <div class="auth-card-body">
@@ -183,8 +187,8 @@
   <!-- ===================================================================== -->
   <section id="screen-forgot" class="screen hidden">
     <div class="auth-header-bar">
-      <button type="button" class="btn-back-signin" style="background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center;">
-        <i data-lucide="arrow-left" style="width:24px; height:24px; color:var(--text-main);"></i>
+      <button type="button" class="icon-touch-btn btn-back-signin" aria-label="Go Back">
+        <i data-lucide="arrow-left"></i>
       </button>
     </div>
     <div class="auth-card-body">
@@ -204,8 +208,8 @@
 
   <section id="screen-reset-password" class="screen hidden">
     <div class="auth-header-bar">
-      <button type="button" class="btn-back-signin" style="background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center;">
-        <i data-lucide="arrow-left" style="width:24px; height:24px; color:var(--text-main);"></i>
+      <button type="button" class="icon-touch-btn btn-back-signin" aria-label="Go Back">
+        <i data-lucide="arrow-left"></i>
       </button>
     </div>
     <div class="auth-card-body">
@@ -233,24 +237,32 @@
   <!-- ===================================================================== -->
   <section id="screen-pos" class="screen hidden">
     <header class="pos-top-appbar">
-      <i data-lucide="menu" id="btn-open-drawer" style="cursor:pointer; width:24px; height:24px;"></i>
+      <button type="button" class="icon-touch-btn" id="btn-open-drawer" aria-label="Open Menu">
+        <i data-lucide="menu"></i>
+      </button>
       <div class="appbar-actions">
-        <i data-lucide="tag" id="btn-apply-ticket-discount" title="Ticket Discount" style="cursor:pointer; width:20px; height:20px;"></i>
-        <i data-lucide="user-plus" id="btn-open-customer-modal" title="Customer" style="cursor:pointer; width:20px; height:20px;"></i>
-        <i data-lucide="more-vertical" id="btn-open-overflow" style="cursor:pointer; width:20px; height:20px;"></i>
+        <button type="button" class="icon-touch-btn" id="btn-apply-ticket-discount" aria-label="Apply Ticket Discount">
+          <i data-lucide="tag"></i>
+        </button>
+        <button type="button" class="icon-touch-btn" id="btn-open-customer-modal" aria-label="Select Customer">
+          <i data-lucide="user-plus"></i>
+        </button>
+        <button type="button" class="icon-touch-btn" id="btn-open-overflow" aria-label="More Options">
+          <i data-lucide="more-vertical"></i>
+        </button>
       </div>
     </header>
 
     <!-- 3-Dot Overflow Popup -->
     <div id="overflow-popup" class="overflow-menu-popup hidden">
-      <div class="overflow-menu-item" id="opt-clear-cart">
+      <button type="button" class="overflow-menu-item" id="opt-clear-cart">
         <i data-lucide="trash-2" style="width:16px; height:16px; color:var(--danger-red);"></i>
         <span>Clear items</span>
-      </div>
-      <div class="overflow-menu-item" id="opt-trigger-sync">
+      </button>
+      <button type="button" class="overflow-menu-item" id="opt-trigger-sync">
         <i data-lucide="refresh-cw" style="width:16px; height:16px;"></i>
         <span>Sync Catalog</span>
-      </div>
+      </button>
     </div>
 
     <!-- Offline Status Pill -->
@@ -270,14 +282,14 @@
           <option value="all">All Items</option>
         </select>
       </div>
-      <div class="search-toggle-btn" id="btn-toggle-search">
-        <i data-lucide="search" style="width:18px; height:18px;"></i>
-      </div>
+      <button type="button" class="icon-touch-btn search-toggle-btn" id="btn-toggle-search" aria-label="Toggle Search Bar">
+        <i data-lucide="search"></i>
+      </button>
     </div>
     
     <!-- Collapsible Search Input -->
     <div id="search-input-wrap" class="hidden" style="padding:8px 14px; background:#fff; border-bottom:1px solid var(--border-line);">
-      <input type="text" id="inp-pos-search" placeholder="Search by name, SKU or scan barcode..." style="width:100%; padding:8px; border:1px solid var(--border-line); border-radius:4px; outline:none;" />
+      <input type="text" id="inp-pos-search" placeholder="Search by name, SKU or scan barcode..." style="width:100%; padding:8px 12px; border:1px solid var(--border-line); border-radius:4px; outline:none; font-size:0.9rem;" />
     </div>
 
     <!-- Product Rows List -->
@@ -297,19 +309,19 @@
       <span style="font-size:0.7rem; opacity:0.75; font-family:monospace;" id="drawer-device-id">POS-01</span>
     </div>
     <nav class="drawer-menu-links">
-      <a class="drawer-link active" data-nav="pos">
-        <i data-lucide="credit-card"></i> New Sale
-      </a>
-      <a class="drawer-link" data-nav="sync">
-        <i data-lucide="refresh-cw"></i> Sync Database
-      </a>
+      <button type="button" class="drawer-link active" data-nav="pos">
+        <i data-lucide="credit-card"></i> <span>New Sale</span>
+      </button>
+      <button type="button" class="drawer-link" data-nav="sync">
+        <i data-lucide="refresh-cw"></i> <span>Sync Database</span>
+      </button>
       <div style="border-top:1px solid #e2e8f0; margin:10px 0;"></div>
-      <a class="drawer-link" id="link-goto-backoffice" style="color:var(--primary-teal); font-weight:700;">
-        <i data-lucide="monitor"></i> Back Office Portal
-      </a>
-      <a class="drawer-link" id="btn-drawer-logout" style="color:var(--danger-red); margin-top:auto;">
-        <i data-lucide="log-out"></i> Log Out
-      </a>
+      <button type="button" class="drawer-link" id="link-goto-backoffice" style="color:var(--primary-teal); font-weight:700;">
+        <i data-lucide="monitor"></i> <span>Back Office Portal</span>
+      </button>
+      <button type="button" class="drawer-link" id="btn-drawer-logout" style="color:var(--danger-red); margin-top:auto;">
+        <i data-lucide="log-out"></i> <span>Log Out</span>
+      </button>
     </nav>
     <div class="drawer-footer">
       <span id="lbl-app-serial">QuickSell Mobile v1.0</span>
@@ -321,16 +333,18 @@
   <!-- ===================================================================== -->
   <div id="modal-item-customizer" class="screen hidden" style="background:#ffffff; z-index:200;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
-      <i data-lucide="x" id="btn-close-customizer" style="cursor:pointer; width:22px; height:22px;"></i>
+      <button type="button" class="icon-touch-btn" id="btn-close-customizer" aria-label="Close Customizer">
+        <i data-lucide="x"></i>
+      </button>
       <h3 id="customizer-item-name" style="font-size:1rem; font-weight:700;">Item</h3>
-      <span id="btn-confirm-item-add" style="color:var(--primary-teal); font-weight:700; cursor:pointer;">ADD</span>
+      <button type="button" id="btn-confirm-item-add" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">ADD</button>
     </div>
-    <div style="padding:20px;">
+    <div style="padding:20px; overflow-y:auto; flex:1;">
       <div style="margin-bottom:24px;">
         <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:8px;">Quantity</label>
         <div style="display:flex; align-items:center; gap:16px;">
           <button type="button" style="width:44px; height:44px; background:#f1f5f9; border:none; font-size:1.3rem; border-radius:4px; cursor:pointer;" id="btn-qty-minus">-</button>
-          <input type="number" id="inp-custom-qty" value="1" min="1" step="any" style="flex:1; text-align:center; border:none; border-bottom:1.5px solid var(--border-line); font-size:1.2rem; font-weight:700; padding:6px;" />
+          <input type="number" id="inp-custom-qty" value="1" min="1" step="any" style="flex:1; text-align:center; border:none; border-bottom:1.5px solid var(--border-line); font-size:1.2rem; font-weight:700; padding:6px; outline:none;" />
           <button type="button" style="width:44px; height:44px; background:#f1f5f9; border:none; font-size:1.3rem; border-radius:4px; cursor:pointer;" id="btn-qty-plus">+</button>
         </div>
       </div>
@@ -343,9 +357,9 @@
       <div class="form-underline-group">
         <label>Line Discount</label>
         <div class="underline-input-wrap" style="display:flex; align-items:center;">
-          <button type="button" id="btn-disc-mode-fixed" style="padding:6px 12px; border:none; background:#f1f5f9; font-weight:700; border-radius:3px;">VAL</button>
+          <button type="button" id="btn-disc-mode-fixed" style="padding:6px 12px; border:none; background:#f1f5f9; font-weight:700; border-radius:3px; cursor:pointer;">VAL</button>
           <input type="number" step="0.01" id="inp-custom-discount" value="0.00" style="flex:1; margin:0 8px;" />
-          <button type="button" id="btn-disc-mode-pct" style="padding:6px 12px; border:none; background:var(--primary-teal-light); color:var(--primary-teal); font-weight:700; border-radius:3px;">%</button>
+          <button type="button" id="btn-disc-mode-pct" style="padding:6px 12px; border:none; background:var(--primary-teal-light); color:var(--primary-teal); font-weight:700; border-radius:3px; cursor:pointer;">%</button>
         </div>
       </div>
       <div class="form-underline-group">
@@ -362,24 +376,28 @@
   <!-- ===================================================================== -->
   <div id="modal-customer" class="screen hidden" style="background:#ffffff; z-index:200;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
-      <i data-lucide="x" id="btn-close-customer" style="cursor:pointer; width:22px; height:22px;"></i>
+      <button type="button" class="icon-touch-btn" id="btn-close-customer" aria-label="Close Customer Selector">
+        <i data-lucide="x"></i>
+      </button>
       <h3 style="font-size:1rem; font-weight:700;">Select Customer</h3>
-      <div style="width:22px;"></div>
+      <div style="width:44px;"></div>
     </div>
     <div style="padding:14px; border-bottom:1px solid #f1f5f9;">
-      <input type="text" id="inp-search-customer" placeholder="Search customer by name or phone..." style="width:100%; padding:10px; border:1px solid var(--border-line); border-radius:4px;" />
+      <input type="text" id="inp-search-customer" placeholder="Search customer by name or phone..." style="width:100%; padding:10px 12px; border:1px solid var(--border-line); border-radius:4px; font-size:0.9rem; outline:none;" />
     </div>
     <div id="customer-list-wrap" style="flex:1; overflow-y:auto; padding:10px 14px;"></div>
   </div>
 
-   <!-- ===================================================================== -->
+  <!-- ===================================================================== -->
   <!-- 10. TENDER / PAYMENT MODAL -->
   <!-- ===================================================================== -->
   <div id="modal-tender" class="screen hidden" style="background:#ffffff; z-index:200; overflow-y:auto;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
-      <i data-lucide="x" id="btn-close-tender" style="cursor:pointer; width:22px; height:22px;"></i>
+      <button type="button" class="icon-touch-btn" id="btn-close-tender" aria-label="Close Tender Modal">
+        <i data-lucide="x"></i>
+      </button>
       <h3 style="font-size:1rem; font-weight:700;">Checkout Tender</h3>
-      <div style="width:22px;"></div>
+      <div style="width:44px;"></div>
     </div>
     <div style="padding:20px;">
       <div style="text-align:center; padding:16px; background:var(--primary-teal-light); border-radius:8px; margin-bottom:20px;">
