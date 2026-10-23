@@ -1,6 +1,6 @@
 export const IDB = {
   dbName: 'qs_mobile_pos_db',
-  dbVersion: 2,
+  dbVersion: 3,
   db: null,
 
   async init() {
@@ -9,18 +9,11 @@ export const IDB = {
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains('cached_catalog')) {
-          db.createObjectStore('cached_catalog', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('cached_categories')) {
-          db.createObjectStore('cached_categories', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('cached_customers')) {
-          db.createObjectStore('cached_customers', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('offline_orders')) {
-          db.createObjectStore('offline_orders', { keyPath: 'id' });
-        }
+        ['cached_catalog', 'cached_categories', 'cached_customers', 'offline_orders', 'cached_receipts', 'cash_shifts', 'inventory_logs'].forEach((storeName) => {
+          if (!db.objectStoreNames.contains(storeName)) {
+            db.createObjectStore(storeName, { keyPath: 'id' });
+          }
+        });
       };
 
       request.onsuccess = (e) => {
@@ -32,78 +25,42 @@ export const IDB = {
     });
   },
 
-  async setCatalog(items) {
-    const tx = this.db.transaction('cached_catalog', 'readwrite');
-    const store = tx.objectStore('cached_catalog');
+  async getAll(storeName) {
+    return new Promise((resolve) => {
+      const tx = this.db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+    });
+  },
+
+  async putItem(storeName, item) {
+    const tx = this.db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    store.put(item);
+    return tx.complete;
+  },
+
+  async setAll(storeName, items) {
+    const tx = this.db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
     await store.clear();
     items.forEach((item) => store.put(item));
     return tx.complete;
   },
 
-  async getCatalog() {
-    return new Promise((resolve) => {
-      const tx = this.db.transaction('cached_catalog', 'readonly');
-      const store = tx.objectStore('cached_catalog');
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
-    });
-  },
-
-  async setCategories(cats) {
-    const tx = this.db.transaction('cached_categories', 'readwrite');
-    const store = tx.objectStore('cached_categories');
-    await store.clear();
-    cats.forEach((c) => store.put(c));
-    return tx.complete;
-  },
-
-  async getCategories() {
-    return new Promise((resolve) => {
-      const tx = this.db.transaction('cached_categories', 'readonly');
-      const store = tx.objectStore('cached_categories');
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
-    });
-  },
-
-  async setCustomers(custs) {
-    const tx = this.db.transaction('cached_customers', 'readwrite');
-    const store = tx.objectStore('cached_customers');
-    await store.clear();
-    custs.forEach((c) => store.put(c));
-    return tx.complete;
-  },
-
-  async getCustomers() {
-    return new Promise((resolve) => {
-      const tx = this.db.transaction('cached_customers', 'readonly');
-      const store = tx.objectStore('cached_customers');
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
-    });
-  },
-
-  async saveOfflineOrder(order) {
-    const tx = this.db.transaction('offline_orders', 'readwrite');
-    const store = tx.objectStore('offline_orders');
-    store.put(order);
-    return tx.complete;
-  },
-
-  async getPendingOrders() {
-    return new Promise((resolve) => {
-      const tx = this.db.transaction('offline_orders', 'readonly');
-      const store = tx.objectStore('offline_orders');
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
-    });
-  },
-
+  // Helpers
+  async getCatalog() { return this.getAll('cached_catalog'); },
+  async setCatalog(items) { return this.setAll('cached_catalog', items); },
+  async getCategories() { return this.getAll('cached_categories'); },
+  async setCategories(cats) { return this.setAll('cached_categories', cats); },
+  async getCustomers() { return this.getAll('cached_customers'); },
+  async setCustomers(custs) { return this.setAll('cached_customers', custs); },
+  async saveOfflineOrder(order) { return this.putItem('offline_orders', order); },
+  async getPendingOrders() { return this.getAll('offline_orders'); },
   async removeOfflineOrder(orderId) {
     const tx = this.db.transaction('offline_orders', 'readwrite');
-    const store = tx.objectStore('offline_orders');
-    store.delete(orderId);
+    tx.objectStore('offline_orders').delete(orderId);
     return tx.complete;
-  },
+  }
 };
-        
