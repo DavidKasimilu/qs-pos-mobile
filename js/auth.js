@@ -2,11 +2,12 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { CONFIG } from './config.js';
 import { IDB } from './idb.js';
 
-// Initialize Supabase through the Cloudflare Worker Edge Proxy
-export const supabase = createClient(CONFIG.GATEWAY_URL, 'public-anon-key', {
+// Direct Supabase Client Initialization
+export const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
   },
 });
 
@@ -35,7 +36,6 @@ export const Auth = {
         this.currentProfile = profile;
         this.currentShop = profile.shops;
       } else {
-        // Fallback for new admin signups
         const { data: fallbackShop } = await supabase.from('shops').select('*').limit(1).maybeSingle();
         this.currentShop = fallbackShop;
       }
@@ -47,7 +47,7 @@ export const Auth = {
 
       return { user: this.currentUser, profile: this.currentProfile, shop: this.currentShop };
     } catch (err) {
-      console.warn('Using offline cached session data:', err);
+      console.warn('[Auth] Offline cached session fallback:', err);
       return null;
     }
   },
@@ -124,7 +124,7 @@ export const Auth = {
       if (catRes.data) await IDB.setCategories(catRes.data);
       if (custRes.data) await IDB.setCustomers(custRes.data);
     } catch (err) {
-      console.warn('Catalog refresh deferred (offline):', err.message);
+      console.warn('[Catalog] Refresh deferred (offline):', err.message);
     }
   },
 
@@ -136,4 +136,3 @@ export const Auth = {
     window.location.reload();
   },
 };
-        
