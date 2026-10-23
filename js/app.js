@@ -499,4 +499,5 @@ async function commitSaleTransaction() {
   alert(`Sale committed successfully! Receipt: ${receiptNo}`);
   document.getElementById('modal-tender').classList.add('hidden');
   Cart.clearTicket(false);
-}
+      }
+        
