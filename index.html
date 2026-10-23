@@ -329,6 +329,424 @@
   </aside>
 
   <!-- ===================================================================== -->
+  <!-- MODAL: ADD NEW CUSTOMER -->
+  <!-- ===================================================================== -->
+  <div id="modal-add-customer" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
+    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
+      <button type="button" class="icon-touch-btn" id="btn-close-add-customer" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+      <h3 style="font-size:1rem; font-weight:700;">Add New Customer</h3>
+      <button type="button" id="btn-save-customer" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
+    </div>
+    <form id="form-new-customer" style="padding:20px;">
+      <div class="form-underline-group">
+        <label>Customer Code</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="cust-code" readonly style="font-weight:700; color:var(--primary-teal-dark);" />
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>First Name</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-firstname" required />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Last Name</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-lastname" required />
+          </div>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Email Address</label>
+        <div class="underline-input-wrap">
+          <input type="email" id="cust-email" />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Phone Number</label>
+        <div class="underline-input-wrap">
+          <input type="tel" id="cust-phone" placeholder="+254 7..." required />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Street Address</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="cust-address" />
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>City</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-city" />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Region / County</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-region" />
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>Postal Code</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="cust-postal" />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Country</label>
+          <div class="underline-input-wrap">
+            <select id="cust-country">
+              <option value="Kenya" selected>Kenya</option>
+              <option value="Tanzania">Tanzania</option>
+              <option value="Uganda">Uganda</option>
+              <option value="Rwanda">Rwanda</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- SCREEN: MANAGE SALES (Past Receipts & Cash Management) -->
+  <!-- ===================================================================== -->
+  <section id="screen-sales" class="screen hidden">
+    <header class="pos-top-appbar">
+      <button type="button" class="icon-touch-btn btn-back-pos" aria-label="Back">
+        <i data-lucide="arrow-left"></i>
+      </button>
+      <h3 style="font-size:1.05rem; font-weight:700;">Manage Sales</h3>
+      <div style="width:44px;"></div>
+    </header>
+    <div style="display:flex; border-bottom:1px solid var(--border-line); background:#fff;">
+      <button type="button" class="tab-btn active" data-sales-tab="receipts" style="flex:1; padding:12px; border:none; background:none; font-weight:700; color:var(--primary-teal); border-bottom:2px solid var(--primary-teal);">Past Receipts</button>
+      <button type="button" class="tab-btn" data-sales-tab="cash" style="flex:1; padding:12px; border:none; background:none; font-weight:600; color:var(--text-muted);">Cash Management</button>
+    </div>
+    
+    <!-- Tab 1: Past Receipts -->
+    <div id="tab-sales-receipts" class="tab-content" style="flex:1; overflow-y:auto; padding:12px;">
+      <div id="receipts-list-container">
+        <p style="text-align:center; padding:30px; color:var(--text-muted);">Loading past receipts...</p>
+      </div>
+    </div>
+
+    <!-- Tab 2: Cash Management -->
+    <div id="tab-sales-cash" class="tab-content hidden" style="flex:1; overflow-y:auto; padding:16px;">
+      <div style="background:var(--primary-teal-light); padding:16px; border-radius:8px; margin-bottom:16px;">
+        <span style="font-size:0.8rem; color:var(--primary-teal-dark); font-weight:700;">CURRENT SHIFT BALANCE</span>
+        <h2 id="lbl-shift-drawer-cash" style="font-size:1.8rem; color:var(--primary-teal-deep); margin-top:4px;">0.00 KES</h2>
+      </div>
+      <div class="form-underline-group">
+        <label>Action Type</label>
+        <div class="underline-input-wrap">
+          <select id="cash-action-type">
+            <option value="in">Cash In / Opening Float</option>
+            <option value="out">Cash Out / Drop</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Amount (KES)</label>
+        <div class="underline-input-wrap">
+          <input type="number" step="0.01" id="inp-cash-action-amount" placeholder="0.00" />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Reason / Note</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="inp-cash-action-note" placeholder="e.g. Morning float, Bank drop" />
+        </div>
+      </div>
+      <button type="button" class="btn-primary-blue" id="btn-save-cash-action">RECORD CASH TRANSACTION</button>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- SCREEN: PRODUCTS (Products & Categories) -->
+  <!-- ===================================================================== -->
+  <section id="screen-products" class="screen hidden">
+    <header class="pos-top-appbar">
+      <button type="button" class="icon-touch-btn btn-back-pos" aria-label="Back">
+        <i data-lucide="arrow-left"></i>
+      </button>
+      <h3 style="font-size:1.05rem; font-weight:700;">Products & Catalog</h3>
+      <button type="button" class="icon-touch-btn" id="btn-add-product-trigger" aria-label="Add Item">
+        <i data-lucide="plus"></i>
+      </button>
+    </header>
+    <div style="display:flex; border-bottom:1px solid var(--border-line); background:#fff;">
+      <button type="button" class="tab-btn active" data-prod-tab="items" style="flex:1; padding:12px; border:none; background:none; font-weight:700; color:var(--primary-teal); border-bottom:2px solid var(--primary-teal);">Products</button>
+      <button type="button" class="tab-btn" data-prod-tab="categories" style="flex:1; padding:12px; border:none; background:none; font-weight:600; color:var(--text-muted);">Categories</button>
+    </div>
+    
+    <div id="tab-prod-items" class="tab-content" style="flex:1; overflow-y:auto;">
+      <div id="products-catalog-list"></div>
+    </div>
+    <div id="tab-prod-categories" class="tab-content hidden" style="flex:1; overflow-y:auto; padding:12px;">
+      <button type="button" class="btn-outline-blue" id="btn-add-category-trigger" style="margin-bottom:14px; height:40px;">+ NEW CATEGORY</button>
+      <div id="categories-catalog-list"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: ADD PRODUCT -->
+  <!-- ===================================================================== -->
+  <div id="modal-add-product" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
+    <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
+      <button type="button" class="icon-touch-btn" id="btn-close-add-product" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+      <h3 style="font-size:1rem; font-weight:700;">Add Product</h3>
+      <button type="button" id="btn-save-new-product" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
+    </div>
+    <form id="form-new-product" style="padding:20px;">
+      <div class="form-underline-group">
+        <label>Product Name</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="prod-name" required />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Category</label>
+        <div class="underline-input-wrap">
+          <select id="prod-category-select" required></select>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>Retail Price (KES)</label>
+          <div class="underline-input-wrap">
+            <input type="number" step="0.01" id="prod-retail-price" required />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Cost Price (KES)</label>
+          <div class="underline-input-wrap">
+            <input type="number" step="0.01" id="prod-cost-price" />
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>Barcode / SKU</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="prod-sku" />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Initial Stock</label>
+          <div class="underline-input-wrap">
+            <input type="number" id="prod-initial-stock" value="0" />
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- SCREEN: INVENTORY (GRN, SA, TOG) -->
+  <!-- ===================================================================== -->
+  <section id="screen-inventory" class="screen hidden">
+    <header class="pos-top-appbar">
+      <button type="button" class="icon-touch-btn btn-back-pos" aria-label="Back">
+        <i data-lucide="arrow-left"></i>
+      </button>
+      <h3 style="font-size:1.05rem; font-weight:700;">Stock & Inventory</h3>
+      <div style="width:44px;"></div>
+    </header>
+    <div style="display:flex; border-bottom:1px solid var(--border-line); background:#fff;">
+      <button type="button" class="tab-btn active" data-inv-tab="grn" style="flex:1; padding:10px 4px; border:none; background:none; font-weight:700; color:var(--primary-teal); border-bottom:2px solid var(--primary-teal); font-size:0.85rem;">GRN</button>
+      <button type="button" class="tab-btn" data-inv-tab="sa" style="flex:1; padding:10px 4px; border:none; background:none; font-weight:600; color:var(--text-muted); font-size:0.85rem;">Stock Adj.</button>
+      <button type="button" class="tab-btn" data-inv-tab="tog" style="flex:1; padding:10px 4px; border:none; background:none; font-weight:600; color:var(--text-muted); font-size:0.85rem;">Transfer (TOG)</button>
+    </div>
+
+    <!-- Sub-tab 1: Goods Received Note (GRN) -->
+    <div id="tab-inv-grn" class="tab-content" style="flex:1; overflow-y:auto; padding:16px;">
+      <h4 style="margin-bottom:14px; font-size:0.95rem; color:var(--text-main);">Receive New Supplier Stock (GRN)</h4>
+      <div class="form-underline-group">
+        <label>Select Product</label>
+        <div class="underline-input-wrap">
+          <select id="grn-product-select"></select>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <div class="form-underline-group" style="flex:1;">
+          <label>Quantity Received</label>
+          <div class="underline-input-wrap">
+            <input type="number" id="grn-qty" min="1" required />
+          </div>
+        </div>
+        <div class="form-underline-group" style="flex:1;">
+          <label>Supplier Buying Cost</label>
+          <div class="underline-input-wrap">
+            <input type="number" step="0.01" id="grn-unit-cost" />
+          </div>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Supplier Name / Invoice No</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="grn-supplier-ref" placeholder="e.g. Mega Distributors #INV-928" />
+        </div>
+      </div>
+      <button type="button" class="btn-primary-blue" id="btn-commit-grn">RECEIVE STOCK</button>
+    </div>
+
+    <!-- Sub-tab 2: Stock Adjustment (SA) -->
+    <div id="tab-inv-sa" class="tab-content hidden" style="flex:1; overflow-y:auto; padding:16px;">
+      <h4 style="margin-bottom:14px; font-size:0.95rem; color:var(--text-main);">Correct / Adjust On-Hand Stock (SA)</h4>
+      <div class="form-underline-group">
+        <label>Select Product</label>
+        <div class="underline-input-wrap">
+          <select id="sa-product-select"></select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Adjustment Type</label>
+        <div class="underline-input-wrap">
+          <select id="sa-type">
+            <option value="damage">Damage / Expired (-)</option>
+            <option value="loss">Loss / Theft (-)</option>
+            <option value="count">Physical Audit Count (=)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Quantity Count / Delta</label>
+        <div class="underline-input-wrap">
+          <input type="number" id="sa-qty" required />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Audit Reason</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="sa-reason" placeholder="e.g. Broken in transit" />
+        </div>
+      </div>
+      <button type="button" class="btn-primary-blue" id="btn-commit-sa">SUBMIT ADJUSTMENT</button>
+    </div>
+
+    <!-- Sub-tab 3: Transfer of Goods (TOG) -->
+    <div id="tab-inv-tog" class="tab-content hidden" style="flex:1; overflow-y:auto; padding:16px;">
+      <h4 style="margin-bottom:14px; font-size:0.95rem; color:var(--text-main);">Transfer Goods to Branch (TOG)</h4>
+      <div class="form-underline-group">
+        <label>Destination Branch</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="tog-destination-branch" placeholder="Branch Name or Code" required />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Select Product</label>
+        <div class="underline-input-wrap">
+          <select id="tog-product-select"></select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Transfer Quantity</label>
+        <div class="underline-input-wrap">
+          <input type="number" id="tog-qty" min="1" required />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Dispatch Tracking Note</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="tog-note" placeholder="e.g. Courier rider #4" />
+        </div>
+      </div>
+      <button type="button" class="btn-primary-blue" id="btn-commit-tog">DISPATCH TRANSFER</button>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- SCREEN: SETTINGS (Software & Printers) -->
+  <!-- ===================================================================== -->
+  <section id="screen-settings" class="screen hidden">
+    <header class="pos-top-appbar">
+      <button type="button" class="icon-touch-btn btn-back-pos" aria-label="Back">
+        <i data-lucide="arrow-left"></i>
+      </button>
+      <h3 style="font-size:1.05rem; font-weight:700;">Settings</h3>
+      <div style="width:44px;"></div>
+    </header>
+    <div style="display:flex; border-bottom:1px solid var(--border-line); background:#fff;">
+      <button type="button" class="tab-btn active" data-settings-tab="software" style="flex:1; padding:12px; border:none; background:none; font-weight:700; color:var(--primary-teal); border-bottom:2px solid var(--primary-teal);">Software</button>
+      <button type="button" class="tab-btn" data-settings-tab="printers" style="flex:1; padding:12px; border:none; background:none; font-weight:600; color:var(--text-muted);">Printers</button>
+    </div>
+
+    <!-- Software Customization -->
+    <div id="tab-settings-software" class="tab-content" style="flex:1; overflow-y:auto; padding:16px;">
+      <div class="form-underline-group">
+        <label>Currency Symbol</label>
+        <div class="underline-input-wrap">
+          <input type="text" id="set-currency" value="KES" />
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Screen Timeout (Keep Screen Awake)</label>
+        <div class="underline-input-wrap">
+          <select id="set-wakelock">
+            <option value="enabled" selected>Always Awake (Prevent Sleep)</option>
+            <option value="disabled">System Default</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Haptic Vibration Feedback</label>
+        <div class="underline-input-wrap">
+          <select id="set-haptics">
+            <option value="enabled" selected>Enabled</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </div>
+      </div>
+      <button type="button" class="btn-primary-blue" id="btn-save-software-settings">SAVE PREFERENCES</button>
+    </div>
+
+    <!-- Printer Hardware -->
+    <div id="tab-settings-printers" class="tab-content hidden" style="flex:1; overflow-y:auto; padding:16px;">
+      <div class="form-underline-group">
+        <label>Printer Connection</label>
+        <div class="underline-input-wrap">
+          <select id="set-printer-type">
+            <option value="bluetooth">Bluetooth ESC/POS</option>
+            <option value="usb">USB / OTG Thermal</option>
+            <option value="network">Network IP Printer</option>
+            <option value="system">Android System Dialog</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Paper Width</label>
+        <div class="underline-input-wrap">
+          <select id="set-paper-width">
+            <option value="58" selected>58mm Handheld Roll</option>
+            <option value="80">80mm Countertop Roll</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>Auto-Print Receipt on Charge</label>
+        <div class="underline-input-wrap">
+          <select id="set-auto-print">
+            <option value="yes" selected>Automatic</option>
+            <option value="no">Manual Prompt</option>
+          </select>
+        </div>
+      </div>
+      <button type="button" class="btn-outline-blue" id="btn-test-print" style="margin-bottom:12px;">TEST PRINT RECEIPT</button>
+      <button type="button" class="btn-primary-blue" id="btn-save-printer-settings">SAVE PRINTER CONFIG</button>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
   <!-- 8. ITEM CUSTOMIZER MODAL -->
   <!-- ===================================================================== -->
   <div id="modal-item-customizer" class="screen hidden" style="background:#ffffff; z-index:200;">
