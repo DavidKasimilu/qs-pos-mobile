@@ -11,17 +11,23 @@ export const Cart = {
     this.items = [];
     this.selectedCustomer = null;
     this.ticketDiscount = 0;
+    this.notifyUpdate();
   },
 
   addItem(product, quantity = 1, customPrice = null, discountVal = 0, discountType = 'pct', remark = '') {
-    const unitPrice = customPrice !== null ? parseFloat(customPrice) : parseFloat(product.retail_price || 0);
-    const qty = parseFloat(quantity) || 1;
+    // Resolve price gracefully across schema variations
+    const rawPrice = customPrice !== null && customPrice !== undefined && customPrice !== '' 
+      ? customPrice 
+      : (product.retail_price ?? product.price ?? 0);
+    const unitPrice = Math.max(0, parseFloat(rawPrice) || 0);
+    const qty = Math.max(0.01, parseFloat(quantity) || 1);
 
+    // Calculate line item discount
     let discountAmount = 0;
     if (discountType === 'pct') {
-      discountAmount = (unitPrice * qty) * (parseFloat(discountVal) / 100);
+      discountAmount = (unitPrice * qty) * (Math.min(100, Math.max(0, parseFloat(discountVal) || 0)) / 100);
     } else {
-      discountAmount = parseFloat(discountVal) || 0;
+      discountAmount = Math.min(unitPrice * qty, Math.max(0, parseFloat(discountVal) || 0));
     }
 
     const lineTotal = Math.max(0, (unitPrice * qty) - discountAmount);
@@ -32,6 +38,7 @@ export const Cart = {
 
     if (existingIndex > -1) {
       this.items[existingIndex].quantity += qty;
+      this.items[existingIndex].discountAmount += discountAmount;
       this.items[existingIndex].total = Math.max(
         0,
         (this.items[existingIndex].quantity * unitPrice) - this.items[existingIndex].discountAmount
@@ -39,7 +46,7 @@ export const Cart = {
     } else {
       this.items.push({
         id: product.id,
-        name: product.name,
+        name: product.name || 'Unnamed Item',
         quantity: qty,
         unitPrice: unitPrice,
         costPrice: parseFloat(product.cost_price || 0),
@@ -53,22 +60,24 @@ export const Cart = {
     this.notifyUpdate();
   },
 
+  setTicketDiscount(amount) {
+    this.ticketDiscount = Math.max(0, parseFloat(amount) || 0);
+    this.notifyUpdate();
+  },
+
   clearTicket(audit = true) {
     if (!this.items.length) return;
 
-    if (audit && this.activeShopId) {
-      this.items.forEach((item) => {
-        if (navigator.onLine && supabase) {
-          supabase.from('cart_discard_logs').insert([{
-            shop_id: this.activeShopId,
-            product_id: item.id,
-            product_name: item.name,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-            reason: 'Mobile terminal ticket cleared',
-          }]).then();
-        }
-      });
+    if (audit && this.activeShopId && navigator.onLine && supabase) {
+      const logs = this.items.map((item) => ({
+        shop_id: this.activeShopId,
+        product_id: item.id,
+        product_name: item.name,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        reason: 'Mobile terminal ticket cleared by user',
+      }));
+      supabase.from('cart_discard_logs').insert(logs).then();
     }
 
     this.items = [];
@@ -107,4 +116,3 @@ export const Cart = {
     }
   },
 };
-                         
