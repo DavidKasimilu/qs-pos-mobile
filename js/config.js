@@ -1,22 +1,41 @@
+// js/config.js
 export const CONFIG = {
-  // Direct Supabase Project Endpoint
-  SUPABASE_URL: 'https://nceblfeenegfzebeiivx.supabase.co',
-  
-  // Public Anon / Publishable Key
-  SUPABASE_ANON_KEY: 'sb_publishable_wc82l8uhVqffrUhY3-XTng_GtISnSLx',
-
-  // Link to the Backoffice Web Portal on GitHub Pages
-  BACKOFFICE_URL: 'https://davidkasimilu.github.io/QuickSellPOS/',
-
-  // Hardware profile & terminal identity metadata
-  DEVICE_NAME: 'Android Mobile POS',
-  APP_VERSION: '1.114.9',
-  PLATFORM: 'mobile_pwa',
-  HEARTBEAT_INTERVAL_MS: 45000,
+  // Replace these with your actual Supabase project credentials
+  SUPABASE_URL: window.SUPABASE_URL || 'https://YOUR_SUPABASE_PROJECT.supabase.co',
+  SUPABASE_ANON_KEY: window.SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY',
 
   STORAGE_KEYS: {
-    DEVICE_FINGERPRINT: 'qs_pos_device_fingerprint',
-    ACTIVE_CART: 'qs_pos_active_cart',
-    AUTH_TOKEN: 'qs_pos_auth_token',
+    AUTH_USER: 'qs_auth_user',
+    AUTH_PROFILE: 'qs_auth_profile',
+    ACTIVE_SHOP: 'qs_active_shop',
+    ACTIVE_SHIFT: 'qs_active_shift',
+    LAST_SYNC_AT: 'qs_last_sync_timestamp'
   },
+
+  SYNC: {
+    POLL_INTERVAL_MS: 30000, // Background sync fallback every 30s
+    CHANNEL_NAME: 'pos-realtime-sync',
+    BATCH_SIZE: 50
+  }
 };
+
+// Initialize Supabase instance onto window if CDN script is loaded
+if (window.supabase && !window.supabaseClient) {
+  window.supabaseClient = window.supabase.createClient(
+    CONFIG.SUPABASE_URL,
+    CONFIG.SUPABASE_ANON_KEY,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      }
+    }
+  );
+}
+
+export const getSupabase = () => window.supabaseClient;

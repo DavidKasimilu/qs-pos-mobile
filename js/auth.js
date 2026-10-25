@@ -1,138 +1,66 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-import { CONFIG } from './config.js';
-import { IDB } from './idb.js';
+// js/auth.js
+import { CONFIG, getSupabase } from './config.js';
+import { syncEngine } from './sync.js';
 
-// Direct Supabase Client Initialization
-export const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
+export const auth = {
+  async login(email, password) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase client not initialized');
+
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+    if (authError) throw authError;
+
+    // Fetch user profile and associated shop
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, role, shop_id, is_active')
+      .eq('id', authData.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      await supabase.auth.signOut();
+      throw new Error('User profile could not be loaded');
+    }
+
+    if (!profile.is_active) {
+      await supabase.auth.signOut();
+      throw new Error('This cashier account is inactive');
+    }
+
+    // Persist profile to localStorage for offline POS access
+    localStorage.setItem(CONFIG.STORAGE_KEYS.AUTH_USER, JSON.stringify(authData.user));
+    localStorage.setItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE, JSON.stringify(profile));
+
+    // Start background sync and realtime channels
+    syncEngine.start();
+
+    return { user: authData.user, profile };
   },
-});
 
-export const Auth = {
-  currentUser: null,
-  currentProfile: null,
-  currentShop: null,
+  async logout() {
+    syncEngine.stop();
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.auth.signOut().catch(() => {});
+    }
+    localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_USER);
+    localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE);
+    localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHIFT);
+    window.location.reload();
+  },
 
-  async syncSession() {
+  getCurrentUser() {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error || !session?.user) {
-        return null;
-      }
-
-      this.currentUser = session.user;
-
-      // 1. Fetch user profile and assigned shop details
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*, shops(*)')
-        .eq('id', this.currentUser.id)
-        .maybeSingle();
-
-      if (profile) {
-        this.currentProfile = profile;
-        this.currentShop = profile.shops;
-      } else {
-        const { data: fallbackShop } = await supabase.from('shops').select('*').limit(1).maybeSingle();
-        this.currentShop = fallbackShop;
-      }
-
-      // 2. Refresh local IndexedDB catalog with current shop products
-      if (this.currentShop?.id) {
-        await this.refreshLocalCatalog(this.currentShop.id);
-      }
-
-      return { user: this.currentUser, profile: this.currentProfile, shop: this.currentShop };
-    } catch (err) {
-      console.warn('[Auth] Offline cached session fallback:', err);
+      return JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE) || 'null');
+    } catch {
       return null;
     }
   },
 
-  async signIn(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    await this.syncSession();
-    return data;
-  },
-
-  async signUp(email, password, fullName, businessName, businessType, phone, country) {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          business_name: businessName,
-          business_type: businessType,
-          phone: phone,
-          country: country,
-        },
-      },
-    });
-    if (error) throw error;
-    return data;
-  },
-
-  async verifySignUpOTP(email, token) {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'signup',
-    });
-    if (error) throw error;
-    await this.syncSession();
-    return data;
-  },
-
-  async requestPasswordReset(email) {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email);
-    if (error) throw error;
-    return data;
-  },
-
-  async verifyPasswordResetOTP(email, token) {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'recovery',
-    });
-    if (error) throw error;
-    return data;
-  },
-
-  async updatePassword(newPassword) {
-    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) throw error;
-    return data;
-  },
-
-  async refreshLocalCatalog(shopId) {
-    if (!navigator.onLine || !shopId) return;
-
-    try {
-      const [prodRes, catRes, custRes] = await Promise.all([
-        supabase.from('products').select('*').eq('shop_id', shopId).eq('is_active', true),
-        supabase.from('categories').select('*'),
-        supabase.from('customers').select('*').eq('shop_id', shopId),
-      ]);
-
-      if (prodRes.data) await IDB.setCatalog(prodRes.data);
-      if (catRes.data) await IDB.setCategories(catRes.data);
-      if (custRes.data) await IDB.setCustomers(custRes.data);
-    } catch (err) {
-      console.warn('[Catalog] Refresh deferred (offline):', err.message);
-    }
-  },
-
-  async signOut() {
-    await supabase.auth.signOut();
-    this.currentUser = null;
-    this.currentProfile = null;
-    this.currentShop = null;
-    window.location.reload();
-  },
+  isAuthenticated() {
+    return !!this.getCurrentUser();
+  }
 };

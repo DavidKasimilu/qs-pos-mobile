@@ -1,31 +1,25 @@
-const CACHE_NAME = 'qs-pos-mobile-direct-v1';
-
-const CRITICAL_ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './css/mobile-theme.css',
-  './css/mobile-layout.css',
-  './js/config.js',
-  './js/idb.js',
-  './js/sync.js',
-  './js/auth.js',
-  './js/cart.js',
-  './js/router.js',
-  './js/app.js'
+// sw.js
+const CACHE_NAME = 'quicksell-pos-v2';
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/css/mobile-layout.css',
+  '/css/mobile-theme.css',
+  '/js/config.js',
+  '/js/idb.js',
+  '/js/sync.js',
+  '/js/auth.js',
+  '/js/cart.js',
+  '/js/app.js',
+  '/js/router.js',
+  '/assets/icon-192.png',
+  '/assets/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      for (const url of CRITICAL_ASSETS) {
-        try {
-          await cache.add(url);
-        } catch (err) {
-          console.warn(`[SW] Precache skipped for: ${url}`);
-        }
-      }
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
@@ -44,28 +38,28 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = event.request.url;
+  const url = new URL(event.request.url);
 
-  // STRICT BYPASS: Never intercept Supabase network calls or CDN dependencies
+  // Network-only for Supabase REST endpoints, WebSocket channels, and external APIs
   if (
-    url.includes('supabase.co') ||
-    url.includes('/rest/v1/') ||
-    url.includes('/auth/v1/') ||
-    url.includes('jsdelivr.net') ||
-    url.includes('unpkg.com')
+    url.hostname.includes('supabase.co') ||
+    url.pathname.includes('/rest/v1/') ||
+    url.pathname.includes('/realtime/v1/') ||
+    event.request.method !== 'GET'
   ) {
-    return;
+    return event.respondWith(fetch(event.request));
   }
 
-  // Handle local shell navigation and cached static assets
+  // Cache-First strategy with network fallback for local static assets
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    caches.match(event.request).then((cachedResponse) => {
       return (
-        cached ||
-        fetch(event.request).catch(() => {
-          if (event.request.mode === 'navigate') {
-            return caches.match('./index.html');
-          }
+        cachedResponse ||
+        fetch(event.request).then((networkResponse) => {
+          return caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, networkResponse.clone());
+            return networkResponse;
+          });
         })
       );
     })
