@@ -1,25 +1,31 @@
-// sw.js
-const CACHE_NAME = 'quicksell-pos-v2';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/css/mobile-layout.css',
-  '/css/mobile-theme.css',
-  '/js/config.js',
-  '/js/idb.js',
-  '/js/sync.js',
-  '/js/auth.js',
-  '/js/cart.js',
-  '/js/app.js',
-  '/js/router.js',
-  '/assets/icon-192.png',
-  '/assets/icon-512.png'
+const CACHE_NAME = 'qs-pos-mobile-direct-v2';
+
+const CRITICAL_ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './css/mobile-theme.css',
+  './css/mobile-layout.css',
+  './js/config.js',
+  './js/idb.js',
+  './js/sync.js',
+  './js/auth.js',
+  './js/cart.js',
+  './js/router.js',
+  './js/app.js'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const url of CRITICAL_ASSETS) {
+        try {
+          await cache.add(url);
+        } catch (err) {
+          console.warn(`[SW] Precache skipped for: ${url}`);
+        }
+      }
+    })
   );
   self.skipWaiting();
 });
@@ -38,30 +44,54 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const req = event.request;
+  const url = req.url;
 
-  // Network-only for Supabase REST endpoints, WebSocket channels, and external APIs
-  if (
-    url.hostname.includes('supabase.co') ||
-    url.pathname.includes('/rest/v1/') ||
-    url.pathname.includes('/realtime/v1/') ||
-    event.request.method !== 'GET'
-  ) {
-    return event.respondWith(fetch(event.request));
+  // STRICT BYPASS: Non-GET mutations must bypass cache immediately
+  if (req.method !== 'GET') {
+    return;
   }
 
-  // Cache-First strategy with network fallback for local static assets
+  // STRICT BYPASS: Never intercept Supabase REST/Realtime/Auth network calls or CDNs
+  if (
+    url.includes('supabase.co') ||
+    url.includes('/rest/v1/') ||
+    url.includes('/auth/v1/') ||
+    url.includes('/realtime/v1/') ||
+    url.includes('jsdelivr.net') ||
+    url.includes('unpkg.com')
+  ) {
+    return;
+  }
+
+  // Cache-First with Network Fallback & Runtime Cache update for local assets
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return (
-        cachedResponse ||
-        fetch(event.request).then((networkResponse) => {
-          return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, networkResponse.clone());
-            return networkResponse;
-          });
+    caches.match(req).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      return fetch(req)
+        .then((networkResponse) => {
+          // Cache valid same-origin assets
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            networkResponse.type === 'basic'
+          ) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(req, responseToCache);
+            });
+          }
+          return networkResponse;
         })
-      );
+        .catch(() => {
+          // SPA offline navigation fallback
+          if (req.mode === 'navigate') {
+            return caches.match('./index.html');
+          }
+        });
     })
   );
 });
