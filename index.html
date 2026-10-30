@@ -18,10 +18,45 @@
 <body>
 
   <!-- ===================================================================== -->
+  <!-- 0. SCREEN LOCK / 4-DIGIT PIN ENTRY OVERLAY -->
+  <!-- ===================================================================== -->
+  <section id="screen-pin-lock" class="screen hidden" style="z-index:999; background:var(--primary-teal-dark); color:#fff; align-items:center; justify-content:center;">
+    <div style="text-align:center; padding:20px; max-width:320px; width:100%;">
+      <i data-lucide="lock" style="width:52px; height:52px; margin-bottom:12px; color:#fff;"></i>
+      <h2 style="font-size:1.4rem; font-weight:800; margin-bottom:4px;">TERMINAL LOCKED</h2>
+      <p style="font-size:0.85rem; opacity:0.85; margin-bottom:24px;">Enter your 4-digit Security PIN to proceed</p>
+      
+      <!-- PIN Dots Display -->
+      <div id="pin-dots-wrap" style="display:flex; justify-content:center; gap:16px; margin-bottom:32px;">
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+      </div>
+
+      <!-- Keypad -->
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; width:100%;">
+        <button type="button" class="pin-key-btn" data-key="1">1</button>
+        <button type="button" class="pin-key-btn" data-key="2">2</button>
+        <button type="button" class="pin-key-btn" data-key="3">3</button>
+        <button type="button" class="pin-key-btn" data-key="4">4</button>
+        <button type="button" class="pin-key-btn" data-key="5">5</button>
+        <button type="button" class="pin-key-btn" data-key="6">6</button>
+        <button type="button" class="pin-key-btn" data-key="7">7</button>
+        <button type="button" class="pin-key-btn" data-key="8">8</button>
+        <button type="button" class="pin-key-btn" data-key="9">9</button>
+        <button type="button" class="pin-key-btn" id="btn-pin-clear" style="font-size:0.9rem; font-weight:700;">CLR</button>
+        <button type="button" class="pin-key-btn" data-key="0">0</button>
+        <button type="button" class="pin-key-btn" id="btn-pin-backspace"><i data-lucide="delete"></i></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
   <!-- 1. SPLASH / ENTRY SCREEN -->
   <!-- ===================================================================== -->
   <section id="screen-splash" class="screen">
-    <div style="height:20px;"></div>
+    <div style="height:10px;"></div>
     <div class="splash-brand-center">
       <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
         <img src="./assets/icon-192.png" alt="QuickSell Logo" style="width:96px; height:96px; border-radius:20px; box-shadow:0 10px 25px rgba(13,148,136,0.3); object-fit:contain;" />
@@ -31,7 +66,8 @@
         </div>
       </div>
     </div>
-    <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:28px;">
+    <!-- Elevated button bar to beat mobile browser bottom nav bar -->
+    <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:52px; padding:0 20px;">
       <button type="button" class="btn-primary-blue" id="btn-goto-register">Registration</button>
       <button type="button" class="btn-outline-blue" id="btn-goto-signin">Sign In</button>
     </div>
@@ -84,7 +120,7 @@
         <i data-lucide="arrow-left"></i>
       </button>
     </div>
-    <div class="auth-card-body" style="overflow-y:auto;">
+    <div class="auth-card-body" style="overflow-y:auto; padding-bottom:40px;">
       <h2 style="color:var(--primary-teal); font-size:1.15rem; font-weight:800; text-align:center; margin-bottom:20px;">REGISTRATION</h2>
       <form id="form-mobile-reg">
         <div class="form-underline-group">
@@ -128,24 +164,24 @@
           </div>
         </div>
         <div class="form-underline-group">
-          <label>Phone number</label>
+          <label>Country & Region</label>
           <div class="underline-input-wrap">
-            <input type="tel" id="reg-phone" placeholder="+254 7..." required />
+            <span id="lbl-reg-flag" style="font-size:1.2rem; margin-right:8px;">🇰🇪</span>
+            <select id="reg-country" required>
+              <option value="Kenya" data-code="+254" data-curr="KES" data-flag="🇰🇪" selected>Kenya (+254, KES)</option>
+              <option value="Tanzania" data-code="+255" data-curr="TZS" data-flag="🇹🇿">Tanzania (+255, TZS)</option>
+              <option value="Uganda" data-code="+256" data-curr="UGX" data-flag="🇺🇬">Uganda (+256, UGX)</option>
+              <option value="Rwanda" data-code="+250" data-curr="RWF" data-flag="🇷🇼">Rwanda (+250, RWF)</option>
+              <option value="Burundi" data-code="+257" data-curr="BIF" data-flag="🇧🇮">Burundi (+257, BIF)</option>
+              <option value="South Sudan" data-code="+211" data-curr="SSP" data-flag="🇸🇸">South Sudan (+211, SSP)</option>
+              <option value="Other" data-code="+" data-curr="USD" data-flag="🌐">Other / International</option>
+            </select>
           </div>
         </div>
         <div class="form-underline-group">
-          <label>Country</label>
+          <label>Phone number</label>
           <div class="underline-input-wrap">
-            <span style="font-size:1.1rem; margin-right:8px;">🇰🇪</span>
-            <select id="reg-country" required>
-              <option value="Kenya" selected>Kenya</option>
-              <option value="Tanzania">Tanzania</option>
-              <option value="Uganda">Uganda</option>
-              <option value="Rwanda">Rwanda</option>
-              <option value="Nigeria">Nigeria</option>
-              <option value="South Africa">South Africa</option>
-              <option value="Other">Other</option>
-            </select>
+            <input type="tel" id="reg-phone" placeholder="+254 7..." required />
           </div>
         </div>
         <button type="submit" class="btn-primary-blue" id="btn-submit-reg" style="margin-top:10px; margin-bottom:24px;">SUBMIT</button>
@@ -240,16 +276,21 @@
       <button type="button" class="icon-touch-btn" id="btn-open-drawer" aria-label="Open Menu">
         <i data-lucide="menu"></i>
       </button>
-      <div class="appbar-actions">
-        <button type="button" class="icon-touch-btn" id="btn-apply-ticket-discount" aria-label="Apply Ticket Discount">
-          <i data-lucide="tag"></i>
-        </button>
-        <button type="button" class="icon-touch-btn" id="btn-open-customer-modal" aria-label="Select Customer">
-          <i data-lucide="user-plus"></i>
-        </button>
-        <button type="button" class="icon-touch-btn" id="btn-open-overflow" aria-label="More Options">
-          <i data-lucide="more-vertical"></i>
-        </button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span id="appbar-offline-icon" style="display:none; color:#fef08a;" title="Operating Offline">
+          <i data-lucide="wifi-off" style="width:20px; height:20px;"></i>
+        </span>
+        <div class="appbar-actions">
+          <button type="button" class="icon-touch-btn" id="btn-apply-ticket-discount" aria-label="Apply Ticket Discount">
+            <i data-lucide="tag"></i>
+          </button>
+          <button type="button" class="icon-touch-btn" id="btn-open-customer-modal" aria-label="Select Customer">
+            <i data-lucide="user-plus"></i>
+          </button>
+          <button type="button" class="icon-touch-btn" id="btn-open-overflow" aria-label="More Options">
+            <i data-lucide="more-vertical"></i>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -262,6 +303,10 @@
       <button type="button" class="overflow-menu-item" id="opt-trigger-sync">
         <i data-lucide="refresh-cw" style="width:16px; height:16px;"></i>
         <span>Sync Catalog</span>
+      </button>
+      <button type="button" class="overflow-menu-item" id="opt-lock-terminal">
+        <i data-lucide="lock" style="width:16px; height:16px;"></i>
+        <span>Lock Terminal</span>
       </button>
     </div>
 
@@ -333,11 +378,10 @@
       </button>
     </nav>
     <div class="drawer-footer">
-      <span id="lbl-app-serial">QuickSell Mobile v1.0</span>
+      <span id="lbl-app-serial">QuickSell Mobile v1.2</span>
     </div>
   </aside>
-
-  <!-- ===================================================================== -->
+<!-- ===================================================================== -->
   <!-- 8. SCREEN: MANAGE SALES (Past Receipts & Cash Management) -->
   <!-- ===================================================================== -->
   <section id="screen-sales" class="screen hidden">
@@ -400,10 +444,33 @@
         <i data-lucide="arrow-left"></i>
       </button>
       <h3 style="font-size:1.05rem; font-weight:700;">Products & Catalog</h3>
-      <button type="button" class="icon-touch-btn" id="btn-add-product-trigger" aria-label="Add Item">
-        <i data-lucide="plus"></i>
-      </button>
+      <div style="display:flex; align-items:center;">
+        <button type="button" class="icon-touch-btn" id="btn-add-product-trigger" aria-label="Add Item">
+          <i data-lucide="plus"></i>
+        </button>
+        <button type="button" class="icon-touch-btn" id="btn-catalog-overflow" aria-label="Catalog Options">
+          <i data-lucide="more-vertical"></i>
+        </button>
+      </div>
     </header>
+
+    <!-- Catalog Header 3-Dot Overflow Menu -->
+    <div id="catalog-overflow-popup" class="overflow-menu-popup hidden">
+      <button type="button" class="overflow-menu-item" id="opt-toggle-multi-select">
+        <i data-lucide="check-square" style="width:16px; height:16px;"></i>
+        <span>Select Multiple</span>
+      </button>
+    </div>
+
+    <!-- Batch Selection Action Bar -->
+    <div id="catalog-batch-bar" class="hidden" style="background:#f1f5f9; padding:8px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-line);">
+      <span style="font-size:0.85rem; font-weight:700; color:var(--text-main);" id="lbl-batch-count">0 Selected</span>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn-outline-blue" id="btn-batch-delete-confirm" style="height:32px; padding:0 12px; font-size:0.75rem; color:var(--danger-red); border-color:var(--danger-red);">DELETE SELECTED</button>
+        <button type="button" class="btn-outline-blue" id="btn-batch-cancel" style="height:32px; padding:0 12px; font-size:0.75rem; border-color:var(--text-muted); color:var(--text-muted);">CANCEL</button>
+      </div>
+    </div>
+
     <div style="display:flex; border-bottom:1px solid var(--border-line); background:#fff;">
       <button type="button" class="tab-btn active" data-prod-tab="items" style="flex:1; padding:12px; border:none; background:none; font-weight:700; color:var(--primary-teal); border-bottom:2px solid var(--primary-teal);">Products</button>
       <button type="button" class="tab-btn" data-prod-tab="categories" style="flex:1; padding:12px; border:none; background:none; font-weight:600; color:var(--text-muted);">Categories</button>
@@ -417,7 +484,6 @@
       <div id="categories-catalog-list"></div>
     </div>
   </section>
-
   <!-- ===================================================================== -->
   <!-- 10. SCREEN: INVENTORY (GRN, SA, TOG) -->
   <!-- ===================================================================== -->
@@ -533,7 +599,7 @@
   </section>
 
   <!-- ===================================================================== -->
-  <!-- 11. SCREEN: SETTINGS (Software & Printers) -->
+  <!-- 11. SCREEN: SETTINGS (Software, Printers & Security PIN) -->
   <!-- ===================================================================== -->
   <section id="screen-settings" class="screen hidden">
     <header class="pos-top-appbar">
@@ -546,6 +612,7 @@
     <div style="display:flex; border-bottom:1px solid var(--border-line); background:#fff;">
       <button type="button" class="tab-btn active" data-settings-tab="software" style="flex:1; padding:12px; border:none; background:none; font-weight:700; color:var(--primary-teal); border-bottom:2px solid var(--primary-teal);">Software</button>
       <button type="button" class="tab-btn" data-settings-tab="printers" style="flex:1; padding:12px; border:none; background:none; font-weight:600; color:var(--text-muted);">Printers</button>
+      <button type="button" class="tab-btn" data-settings-tab="security" style="flex:1; padding:12px; border:none; background:none; font-weight:600; color:var(--text-muted);">Security</button>
     </div>
 
     <!-- Software Customization -->
@@ -611,8 +678,31 @@
       <button type="button" class="btn-outline-blue" id="btn-test-print" style="margin-bottom:12px;">TEST PRINT RECEIPT</button>
       <button type="button" class="btn-primary-blue" id="btn-save-printer-settings">SAVE PRINTER CONFIG</button>
     </div>
-  </section>
 
+    <!-- Security PIN Setup -->
+    <div id="tab-settings-security" class="tab-content hidden" style="flex:1; overflow-y:auto; padding:16px;">
+      <h4 style="font-size:0.95rem; margin-bottom:12px; color:var(--text-main);">App Security PIN</h4>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:20px;">
+        Set a 4-digit PIN code to lock the application when installed or left idle.
+      </p>
+      <div class="form-underline-group">
+        <label>Enable Security PIN</label>
+        <div class="underline-input-wrap">
+          <select id="set-pin-enabled">
+            <option value="disabled" selected>Disabled</option>
+            <option value="enabled">Enabled</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-underline-group">
+        <label>New 4-Digit PIN</label>
+        <div class="underline-input-wrap">
+          <input type="password" id="set-pin-code" maxlength="4" pattern="[0-9]{4}" placeholder="••••" style="letter-spacing:6px; font-weight:700;" />
+        </div>
+      </div>
+      <button type="button" class="btn-primary-blue" id="btn-save-pin-settings">SAVE SECURITY PIN</button>
+    </div>
+  </section>
   <!-- ===================================================================== -->
   <!-- 12. MODAL: ITEM CUSTOMIZER -->
   <!-- ===================================================================== -->
@@ -677,17 +767,18 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- 14. MODAL: ADD NEW CUSTOMER -->
+  <!-- 14. MODAL: ADD / EDIT CUSTOMER -->
   <!-- ===================================================================== -->
   <div id="modal-add-customer" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
       <button type="button" class="icon-touch-btn" id="btn-close-add-customer" aria-label="Close">
         <i data-lucide="x"></i>
       </button>
-      <h3 style="font-size:1rem; font-weight:700;">Add New Customer</h3>
+      <h3 id="lbl-modal-customer-title" style="font-size:1rem; font-weight:700;">Add New Customer</h3>
       <button type="button" id="btn-save-customer" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
     </div>
     <form id="form-new-customer" style="padding:20px;">
+      <input type="hidden" id="cust-edit-id" value="" />
       <div class="form-underline-group">
         <label>Customer Code</label>
         <div class="underline-input-wrap">
@@ -755,6 +846,8 @@
               <option value="Tanzania">Tanzania</option>
               <option value="Uganda">Uganda</option>
               <option value="Rwanda">Rwanda</option>
+              <option value="Burundi">Burundi</option>
+              <option value="South Sudan">South Sudan</option>
               <option value="Other">Other</option>
             </select>
           </div>
@@ -762,19 +855,33 @@
       </div>
     </form>
   </div>
-
-  <!-- ===================================================================== -->
-  <!-- 15. MODAL: ADD PRODUCT -->
+   <!-- ===================================================================== -->
+  <!-- 15. MODAL: ADD / EDIT PRODUCT (WITH IMAGE UPLOAD) -->
   <!-- ===================================================================== -->
   <div id="modal-add-product" class="screen hidden" style="background:#ffffff; z-index:210; overflow-y:auto;">
     <div class="auth-header-bar" style="justify-content:space-between; border-bottom:1px solid #e2e8f0;">
       <button type="button" class="icon-touch-btn" id="btn-close-add-product" aria-label="Close">
         <i data-lucide="x"></i>
       </button>
-      <h3 style="font-size:1rem; font-weight:700;">Add Product</h3>
+      <h3 id="lbl-modal-product-title" style="font-size:1rem; font-weight:700;">Add Product</h3>
       <button type="button" id="btn-save-new-product" style="background:none; border:none; color:var(--primary-teal); font-weight:800; font-size:0.95rem; cursor:pointer; padding:8px 12px;">SAVE</button>
     </div>
     <form id="form-new-product" style="padding:20px;">
+      <input type="hidden" id="prod-edit-id" value="" />
+      
+      <!-- Product Image Selection & Preview -->
+      <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px;">
+        <div id="prod-img-preview-box" style="width:84px; height:84px; border-radius:12px; background:#f1f5f9; border:1px dashed var(--border-line); display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:8px; position:relative;">
+          <img id="img-preview-thumb" src="" alt="Preview" class="hidden" style="width:100%; height:100%; object-fit:cover;" />
+          <i id="img-preview-placeholder" data-lucide="image-plus" style="width:32px; height:32px; color:var(--text-muted);"></i>
+        </div>
+        <label for="file-prod-image" class="btn-outline-blue" style="height:32px; width:auto; padding:0 16px; font-size:0.75rem; display:inline-flex; align-items:center;">
+          SELECT IMAGE
+        </label>
+        <input type="file" id="file-prod-image" accept="image/*" class="hidden" />
+        <input type="hidden" id="prod-existing-image-url" value="" />
+      </div>
+
       <div class="form-underline-group">
         <label>Product Name</label>
         <div class="underline-input-wrap">
@@ -789,13 +896,13 @@
       </div>
       <div style="display:flex; gap:12px;">
         <div class="form-underline-group" style="flex:1;">
-          <label>Retail Price (KES)</label>
+          <label>Retail Price</label>
           <div class="underline-input-wrap">
             <input type="number" step="0.01" id="prod-retail-price" required />
           </div>
         </div>
         <div class="form-underline-group" style="flex:1;">
-          <label>Cost Price (KES)</label>
+          <label>Cost Price</label>
           <div class="underline-input-wrap">
             <input type="number" step="0.01" id="prod-cost-price" />
           </div>
@@ -809,7 +916,7 @@
           </div>
         </div>
         <div class="form-underline-group" style="flex:1;">
-          <label>Initial Stock</label>
+          <label>Initial / Cur Stock</label>
           <div class="underline-input-wrap">
             <input type="number" id="prod-initial-stock" value="0" />
           </div>

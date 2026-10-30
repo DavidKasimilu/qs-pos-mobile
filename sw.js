@@ -1,4 +1,4 @@
-const CACHE_NAME = 'qs-pos-mobile-direct-v2';
+const CACHE_NAME = 'qs-pos-mobile-direct-v3';
 
 const CRITICAL_ASSETS = [
   './',
@@ -52,12 +52,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // STRICT BYPASS: Never intercept Supabase REST/Realtime/Auth network calls or CDNs
+  // STRICT BYPASS: Never intercept Supabase REST/Realtime/Auth/Storage network calls or CDNs
   if (
     url.includes('supabase.co') ||
     url.includes('/rest/v1/') ||
     url.includes('/auth/v1/') ||
     url.includes('/realtime/v1/') ||
+    url.includes('/storage/v1/') ||
     url.includes('jsdelivr.net') ||
     url.includes('unpkg.com')
   ) {
