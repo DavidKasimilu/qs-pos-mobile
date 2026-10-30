@@ -95,6 +95,12 @@ body {
   background: var(--primary-teal-dark);
 }
 
+.btn-primary-blue:disabled {
+  background: #94a3b8;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .btn-outline-blue {
   width: 100%;
   height: 48px;
@@ -112,4 +118,22 @@ body {
 
 .btn-outline-blue:active {
   background: var(--primary-teal-light);
+}
+
+/* Tab Navigation Buttons */
+.tab-btn {
+  transition: color 0.15s ease, border-bottom 0.15s ease;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
 }

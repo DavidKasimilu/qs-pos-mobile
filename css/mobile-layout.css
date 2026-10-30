@@ -61,7 +61,7 @@
 #screen-splash {
   justify-content: space-between;
   align-items: center;
-  padding: 40px 24px 30px;
+  padding: 40px 24px 60px; /* Safe padding for browser bottom bars */
 }
 
 .splash-brand-center {
@@ -156,7 +156,7 @@
   height: 20px;
 }
 
-/* Product Catalog Row Items */
+/* Product Catalog Row Items & Images */
 .pos-product-list {
   flex: 1;
   overflow-y: auto;
@@ -167,9 +167,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
+  position: relative;
 }
 
 .product-list-row:active {
@@ -185,10 +186,10 @@
 .product-row-circle {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: linear-gradient(135deg, #14b8a6, #0d9488);
   color: #ffffff;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   display: flex;
   text-align: center;
   align-items: center;
@@ -196,6 +197,31 @@
   font-weight: 800;
   padding: 4px;
   flex-shrink: 0;
+  object-fit: cover;
+}
+
+.product-row-image {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+}
+
+/* Row Action & Selection Layouts */
+.batch-checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary-teal);
+  cursor: pointer;
+  margin-right: 12px;
+}
+
+.item-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* 3-Dot Overflow Menu */
@@ -206,7 +232,7 @@
   background: #ffffff;
   border-radius: 6px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-  width: 180px;
+  width: 190px;
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -230,6 +256,38 @@
 
 .overflow-menu-item:active {
   background: #f8fafc;
+}
+
+/* Row Context Popup Dropdown */
+.row-context-popup {
+  position: absolute;
+  right: 40px;
+  top: 10px;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  z-index: 40;
+  border: 1px solid var(--border-line);
+  width: 140px;
+  display: flex;
+  flex-direction: column;
+}
+
+.row-context-item {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--text-main);
+  background: none;
+  border: none;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.row-context-item:active {
+  background: #f1f5f9;
 }
 
 /* Side Navigation Drawer */
@@ -318,4 +376,38 @@
   font-size: 0.75rem;
   color: var(--text-muted);
   border-top: 1px solid var(--border-line);
+}
+
+/* Security PIN Overlay & Keypad Buttons */
+.pin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  transition: all 0.15s ease;
+}
+
+.pin-dot.filled {
+  background: #ffffff;
+  border-color: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+}
+
+.pin-key-btn {
+  height: 60px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pin-key-btn:active {
+  background: rgba(255, 255, 255, 0.35);
 }
