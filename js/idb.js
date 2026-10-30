@@ -1,6 +1,6 @@
 export const IDB = {
   dbName: 'qs_mobile_pos_db',
-  dbVersion: 4,
+  dbVersion: 5,
   db: null,
 
   async init() {

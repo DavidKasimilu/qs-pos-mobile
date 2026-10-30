@@ -17,6 +17,18 @@ export const Auth = {
   currentProfile: null,
   currentShop: null,
 
+  getCurrencyForCountry(country) {
+    const map = {
+      'Kenya': 'KES',
+      'Tanzania': 'TZS',
+      'Uganda': 'UGX',
+      'Rwanda': 'RWF',
+      'Burundi': 'BIF',
+      'South Sudan': 'SSP'
+    };
+    return map[country] || 'KES';
+  },
+
   async syncSession() {
     try {
       if (navigator.onLine) {
@@ -27,7 +39,7 @@ export const Auth = {
 
         this.currentUser = session.user;
 
-        // 1. Fetch user profile and assigned shop details
+        // Fetch user profile and assigned shop details
         const { data: profile } = await supabase
           .from('profiles')
           .select('*, shops(*)')
@@ -42,7 +54,7 @@ export const Auth = {
           this.currentShop = fallbackShop;
         }
 
-        // Cache session identity locally for offline POS operation
+        // Cache session identity locally for uninterrupted offline operation
         localStorage.setItem(CONFIG.STORAGE_KEYS.AUTH_USER, JSON.stringify(this.currentUser));
         if (this.currentProfile) {
           localStorage.setItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE, JSON.stringify(this.currentProfile));
@@ -51,7 +63,7 @@ export const Auth = {
           localStorage.setItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP, this.currentShop.id);
         }
 
-        // 2. Refresh local IndexedDB catalog with current shop products
+        // Refresh local IndexedDB catalog with current shop products
         if (this.currentShop?.id) {
           await this.refreshLocalCatalog(this.currentShop.id);
           SyncEngine.startBackgroundSync();
@@ -62,7 +74,7 @@ export const Auth = {
         return this.restoreCachedSession();
       }
     } catch (err) {
-      console.warn('[Auth] Offline cached session fallback:', err);
+      console.warn('[Auth] Network error, restoring offline cached session:', err);
       return this.restoreCachedSession();
     }
   },
@@ -72,14 +84,19 @@ export const Auth = {
       const cachedUser = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.AUTH_USER) || 'null');
       const cachedProfile = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE) || 'null');
 
-      if (cachedProfile) {
+      if (cachedProfile || cachedUser) {
         this.currentUser = cachedUser;
         this.currentProfile = cachedProfile;
-        this.currentShop = cachedProfile.shops || {
-          id: localStorage.getItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP),
-          name: cachedProfile.full_name ? `${cachedProfile.full_name}'s Shop` : 'QuickSell Terminal',
-          currency: 'KES'
+        
+        const country = cachedProfile?.country || 'Kenya';
+        const defaultCurrency = this.getCurrencyForCountry(country);
+
+        this.currentShop = cachedProfile?.shops || {
+          id: localStorage.getItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP) || 'offline_shop',
+          name: cachedProfile?.full_name ? `${cachedProfile.full_name}'s Shop` : 'QuickSell Terminal',
+          currency: defaultCurrency
         };
+
         return { user: this.currentUser, profile: this.currentProfile, shop: this.currentShop };
       }
     } catch (e) {
@@ -162,10 +179,10 @@ export const Auth = {
       }
 
       if (prodRes.data) {
-        // Map current inventory stock onto products
         const invMap = new Map((invRes.data || []).map((i) => [i.product_id, i.quantity_on_hand]));
         const enrichedProducts = prodRes.data.map((p) => ({
           ...p,
+          image_url: p.image_url || null,
           stock_quantity: invMap.has(p.id) ? invMap.get(p.id) : (p.stock_quantity ?? 0)
         }));
         await IDB.setCatalog(enrichedProducts);

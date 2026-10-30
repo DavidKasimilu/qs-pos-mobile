@@ -10,6 +10,10 @@ let currentCustomizingProduct = null;
 let customDiscountMode = 'pct';
 let productsList = [];
 let categoriesList = [];
+let isMultiSelectMode = false;
+let selectedBatchIds = new Set();
+let pinEntryBuffer = '';
+let appPinCode = localStorage.getItem('qs_pos_app_pin') || null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   Router.init();
@@ -19,6 +23,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindTerminalActions();
   bindDrawerModules();
   bindLiveSyncEvents();
+  bindImageUploader();
+  bindSecurityPinPad();
 
   if (window.lucide) window.lucide.createIcons();
 
@@ -32,16 +38,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('[IDB] Warning:', err);
   }
 
-  const statusPill = document.getElementById('connection-status-pill');
-  SyncEngine.init((isOnline) => {
+  const updateOnlineStatus = (isOnline) => {
+    const statusPill = document.getElementById('connection-status-pill');
+    const offlineIcon = document.getElementById('appbar-offline-icon');
     if (statusPill) statusPill.style.display = isOnline ? 'none' : 'block';
-  });
-  if (statusPill) statusPill.style.display = navigator.onLine ? 'none' : 'block';
+    if (offlineIcon) offlineIcon.style.display = isOnline ? 'none' : 'inline-flex';
+  };
+
+  SyncEngine.init(updateOnlineStatus);
+  updateOnlineStatus(navigator.onLine);
 
   try {
     const session = await Auth.syncSession();
     if (session?.user) {
-      bootTerminal();
+      if (appPinCode) {
+        lockTerminalPin();
+      } else {
+        bootTerminal();
+      }
     } else {
       Router.navigate('splash', false);
     }
@@ -49,6 +63,120 @@ document.addEventListener('DOMContentLoaded', async () => {
     Router.navigate('splash', false);
   }
 });
+
+// =========================================================================
+// Security PIN & Screen Lock Management
+// =========================================================================
+function bindSecurityPinPad() {
+  const pinDots = document.querySelectorAll('.pin-dot');
+  
+  const updatePinDots = () => {
+    pinDots.forEach((dot, idx) => {
+      if (idx < pinEntryBuffer.length) {
+        dot.classList.add('filled');
+      } else {
+        dot.classList.remove('filled');
+      }
+    });
+  };
+
+  document.querySelectorAll('.pin-key-btn[data-key]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      if (pinEntryBuffer.length < 4) {
+        pinEntryBuffer += btn.dataset.key;
+        updatePinDots();
+        if (pinEntryBuffer.length === 4) {
+          setTimeout(verifyPinCode, 100);
+        }
+      }
+    };
+  });
+
+  const btnClear = document.getElementById('btn-pin-clear');
+  if (btnClear) {
+    btnClear.onclick = () => {
+      pinEntryBuffer = '';
+      updatePinDots();
+    };
+  }
+
+  const btnBack = document.getElementById('btn-pin-backspace');
+  if (btnBack) {
+    btnBack.onclick = () => {
+      pinEntryBuffer = pinEntryBuffer.slice(0, -1);
+      updatePinDots();
+    };
+  }
+}
+
+function verifyPinCode() {
+  if (pinEntryBuffer === appPinCode) {
+    pinEntryBuffer = '';
+    document.querySelectorAll('.pin-dot').forEach((d) => d.classList.remove('filled'));
+    document.getElementById('screen-pin-lock').classList.add('hidden');
+    bootTerminal();
+  } else {
+    alert('Incorrect Security PIN. Please try again.');
+    pinEntryBuffer = '';
+    document.querySelectorAll('.pin-dot').forEach((d) => d.classList.remove('filled'));
+  }
+}
+
+function lockTerminalPin() {
+  pinEntryBuffer = '';
+  document.querySelectorAll('.pin-dot').forEach((d) => d.classList.remove('filled'));
+  document.getElementById('screen-pin-lock').classList.remove('hidden');
+}
+
+// =========================================================================
+// Product Image Uploading (Supabase Storage)
+// =========================================================================
+function bindImageUploader() {
+  const fileInput = document.getElementById('file-prod-image');
+  const previewThumb = document.getElementById('img-preview-thumb');
+  const placeholder = document.getElementById('img-preview-placeholder');
+  const existingUrlInput = document.getElementById('prod-existing-image-url');
+
+  if (fileInput) {
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          previewThumb.src = event.target.result;
+          previewThumb.classList.remove('hidden');
+          if (placeholder) placeholder.classList.add('hidden');
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+  }
+}
+
+async function uploadProductImage(file, productId) {
+  if (!file || !supabase) return null;
+
+  try {
+    const ext = file.name.split('.').pop();
+    const filePath = `${Auth.currentShop?.id || 'shop'}/${productId}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: publicUrlData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath);
+
+    return publicUrlData?.publicUrl || null;
+  } catch (err) {
+    console.warn('[Image Upload] Exception uploading to Supabase Storage:', err);
+    return null;
+  }
+}
 
 // =========================================================================
 // Real-time Event Subscriptions (Web Back-Office <-> Mobile POS)
@@ -152,7 +280,6 @@ async function loadCatalogData() {
     categoriesList = await IDB.getCategories();
   }
 
-  // Merge exact quantities from cached_inventory if available
   if (inventoryList && inventoryList.length) {
     const invMap = new Map(inventoryList.map((i) => [i.product_id, i.quantity_on_hand]));
     productsList = productsList.map((p) => ({
@@ -192,10 +319,14 @@ function renderProductRows(items) {
     const stock = item.stock_quantity ?? item.stock ?? null;
     const initials = (item.name || 'QS').slice(0, 2).toUpperCase();
 
+    const mediaHtml = item.image_url 
+      ? `<img src="${item.image_url}" alt="${item.name}" class="product-row-image" onerror="this.outerHTML='<div class=\\'product-row-circle\\'>${initials}</div>'" />`
+      : `<div class="product-row-circle">${initials}</div>`;
+
     return `
       <div class="product-list-row" data-id="${item.id}">
         <div class="product-row-left">
-          <div class="product-row-circle">${initials}</div>
+          ${mediaHtml}
           <div>
             <div style="font-weight:700; font-size:0.95rem; color:var(--text-main);">${item.name || 'Unnamed Item'}</div>
             <div style="font-size:0.75rem; color:var(--text-muted);">
@@ -222,15 +353,23 @@ function renderProductRows(items) {
 }
 
 // =========================================================================
-// Customer Management & Creation (+ ADD NEW CUSTOMER)
+// Customer Management (Add, Edit, Delete)
 // =========================================================================
 function bindCustomerModalActions() {
-  const modalCustList = document.getElementById('modal-customer');
   const modalAddCust = document.getElementById('modal-add-customer');
 
-  // Open "Add Customer" Form
   document.getElementById('btn-show-add-customer').onclick = () => {
+    document.getElementById('cust-edit-id').value = '';
+    document.getElementById('lbl-modal-customer-title').textContent = 'Add New Customer';
     document.getElementById('cust-code').value = 'CUST-' + Math.floor(1000 + Math.random() * 9000);
+    document.getElementById('cust-firstname').value = '';
+    document.getElementById('cust-lastname').value = '';
+    document.getElementById('cust-email').value = '';
+    document.getElementById('cust-phone').value = '';
+    document.getElementById('cust-address').value = '';
+    document.getElementById('cust-city').value = '';
+    document.getElementById('cust-region').value = '';
+    document.getElementById('cust-postal').value = '';
     modalAddCust.classList.remove('hidden');
     if (window.lucide) window.lucide.createIcons({ root: modalAddCust });
   };
@@ -239,9 +378,9 @@ function bindCustomerModalActions() {
     modalAddCust.classList.add('hidden');
   };
 
-  // Submit New Customer
   document.getElementById('btn-save-customer').onclick = async (e) => {
     e.preventDefault();
+    const editId = document.getElementById('cust-edit-id').value;
     const firstName = document.getElementById('cust-firstname').value.trim();
     const lastName = document.getElementById('cust-lastname').value.trim();
     const phone = document.getElementById('cust-phone').value.trim();
@@ -252,8 +391,10 @@ function bindCustomerModalActions() {
     }
 
     const nowIso = new Date().toISOString();
-    const newCust = {
-      id: crypto.randomUUID(),
+    const custId = editId || crypto.randomUUID();
+
+    const custObj = {
+      id: custId,
       shop_id: Auth.currentShop?.id,
       customer_code: document.getElementById('cust-code').value,
       name: `${firstName} ${lastName}`.trim(),
@@ -266,28 +407,31 @@ function bindCustomerModalActions() {
       region: document.getElementById('cust-region').value.trim(),
       postal_code: document.getElementById('cust-postal').value.trim(),
       country: document.getElementById('cust-country').value || 'Kenya',
-      loyalty_points: 0,
-      outstanding_balance: 0,
-      created_at: nowIso,
       updated_at: nowIso
     };
 
+    if (!editId) {
+      custObj.created_at = nowIso;
+      custObj.loyalty_points = 0;
+      custObj.outstanding_balance = 0;
+    }
+
     try {
       if (navigator.onLine && supabase) {
-        const { error } = await supabase.from('customers').insert([newCust]);
+        const { error } = await supabase.from('customers').upsert([custObj]);
         if (error) throw error;
       } else {
-        await IDB.queueOutbox('CREATE_CUSTOMER', newCust);
+        await IDB.queueOutbox(editId ? 'UPDATE_CUSTOMER' : 'CREATE_CUSTOMER', custObj);
       }
-      await IDB.putItem('cached_customers', newCust);
-      alert('Customer saved successfully!');
+      await IDB.putItem('cached_customers', custObj);
+      alert(editId ? 'Customer updated!' : 'Customer saved!');
       modalAddCust.classList.add('hidden');
       renderCustomerList();
     } catch (err) {
-      console.warn('[Customer] Online insert failed, buffered to outbox:', err);
-      await IDB.queueOutbox('CREATE_CUSTOMER', newCust);
-      await IDB.putItem('cached_customers', newCust);
-      alert('Customer cached locally and will sync to backoffice.');
+      console.warn('[Customer] Operation buffered:', err);
+      await IDB.queueOutbox(editId ? 'UPDATE_CUSTOMER' : 'CREATE_CUSTOMER', custObj);
+      await IDB.putItem('cached_customers', custObj);
+      alert('Customer saved locally and queued for sync.');
       modalAddCust.classList.add('hidden');
       renderCustomerList();
     }
@@ -316,22 +460,73 @@ async function renderCustomerList(filterText = '') {
         <strong style="color:var(--text-main); font-size:0.95rem;">${c.name}</strong>
         <div style="font-size:0.75rem; color:var(--text-muted);">${c.phone || 'No phone'} | Code: ${c.customer_code || '-'}</div>
       </div>
-      <button type="button" class="btn-outline-blue" style="height:32px; font-size:0.75rem; width:auto; padding:0 14px;">SELECT</button>
+      <div class="item-row-actions">
+        <button type="button" class="btn-outline-blue btn-select-cust" data-id="${c.id}" style="height:32px; font-size:0.75rem; padding:0 12px; margin-right:4px;">SELECT</button>
+        <button type="button" class="icon-touch-btn btn-edit-cust" data-id="${c.id}" aria-label="Edit Customer">
+          <i data-lucide="edit-3" style="width:16px; height:16px; color:var(--primary-teal);"></i>
+        </button>
+        <button type="button" class="icon-touch-btn btn-del-cust" data-id="${c.id}" aria-label="Delete Customer">
+          <i data-lucide="trash-2" style="width:16px; height:16px; color:var(--danger-red);"></i>
+        </button>
+      </div>
     </div>
   `).join('');
 
-  container.querySelectorAll('[data-cust-id]').forEach((row) => {
-    row.onclick = () => {
-      const cust = customers.find((c) => c.id === row.dataset.custId);
+  if (window.lucide) window.lucide.createIcons({ root: container });
+
+  container.querySelectorAll('.btn-select-cust').forEach((btn) => {
+    btn.onclick = () => {
+      const cust = customers.find((c) => c.id === btn.dataset.id);
       Cart.selectedCustomer = cust;
       alert(`Customer '${cust.name}' attached to current ticket.`);
       document.getElementById('modal-customer').classList.add('hidden');
     };
   });
+
+  container.querySelectorAll('.btn-edit-cust').forEach((btn) => {
+    btn.onclick = () => {
+      const c = customers.find((cust) => cust.id === btn.dataset.id);
+      if (!c) return;
+      document.getElementById('cust-edit-id').value = c.id;
+      document.getElementById('lbl-modal-customer-title').textContent = 'Edit Customer';
+      document.getElementById('cust-code').value = c.customer_code || '';
+      document.getElementById('cust-firstname').value = c.first_name || c.name.split(' ')[0] || '';
+      document.getElementById('cust-lastname').value = c.last_name || c.name.split(' ').slice(1).join(' ') || '';
+      document.getElementById('cust-email').value = c.email || '';
+      document.getElementById('cust-phone').value = c.phone || '';
+      document.getElementById('cust-address').value = c.address || '';
+      document.getElementById('cust-city').value = c.city || '';
+      document.getElementById('cust-region').value = c.region || '';
+      document.getElementById('cust-postal').value = c.postal_code || '';
+      document.getElementById('cust-country').value = c.country || 'Kenya';
+      document.getElementById('modal-add-customer').classList.remove('hidden');
+    };
+  });
+
+  container.querySelectorAll('.btn-del-cust').forEach((btn) => {
+    btn.onclick = async () => {
+      const c = customers.find((cust) => cust.id === btn.dataset.id);
+      if (!c) return;
+      if (confirm(`Are you sure you want to delete customer '${c.name}'?`)) {
+        try {
+          if (navigator.onLine && supabase) {
+            await supabase.from('customers').delete().eq('id', c.id);
+          } else {
+            await IDB.queueOutbox('DELETE_CUSTOMER', { id: c.id });
+          }
+        } catch (e) {
+          await IDB.queueOutbox('DELETE_CUSTOMER', { id: c.id });
+        }
+        await IDB.removeCustomer(c.id);
+        alert('Customer deleted.');
+        renderCustomerList();
+      }
+    };
+  });
 }
 
 // =========================================================================
-// Drawer Modules (Sales, Products, Inventory, Settings)
+// Drawer Modules & Product/Category Management (Edit & Batch Delete)
 // =========================================================================
 function bindDrawerModules() {
   const drawer = document.getElementById('side-drawer');
@@ -342,7 +537,6 @@ function bindDrawerModules() {
     backdrop.classList.remove('active');
   };
 
-  // Drawer Route Clicks
   document.querySelectorAll('.drawer-link[data-nav]').forEach((link) => {
     link.onclick = (e) => {
       e.preventDefault();
@@ -366,68 +560,120 @@ function bindDrawerModules() {
     };
   });
 
-  // Manage Sales Sub-Tabs
   bindTabSwitching('data-sales-tab', 'tab-sales-');
-  // Products Sub-Tabs
   bindTabSwitching('data-prod-tab', 'tab-prod-');
-  // Inventory Sub-Tabs
   bindTabSwitching('data-inv-tab', 'tab-inv-');
-  // Settings Sub-Tabs
   bindTabSwitching('data-settings-tab', 'tab-settings-');
 
-  // Cash In / Cash Out Actions
-  document.getElementById('btn-save-cash-action').onclick = async () => {
-    const actionType = document.getElementById('cash-action-type').value;
-    const amount = parseFloat(document.getElementById('inp-cash-action-amount').value) || 0;
-    const note = document.getElementById('inp-cash-action-note').value.trim();
-
-    if (amount <= 0) return alert('Enter a valid amount.');
-
-    const payload = {
-      id: crypto.randomUUID(),
-      shop_id: Auth.currentShop?.id,
-      cashier_id: Auth.currentUser?.id,
-      action_type: actionType,
-      amount: amount,
-      note: note,
-      created_at: new Date().toISOString()
+  // Multi-Select Overflow Toggle in Catalog Top AppBar
+  const catalogOverflow = document.getElementById('catalog-overflow-popup');
+  const btnCatalogOverflow = document.getElementById('btn-catalog-overflow');
+  if (btnCatalogOverflow && catalogOverflow) {
+    btnCatalogOverflow.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      catalogOverflow.classList.toggle('hidden');
+      if (window.lucide) window.lucide.createIcons({ root: catalogOverflow });
     };
 
-    try {
-      if (navigator.onLine && supabase) {
-        await supabase.from('cash_transactions').insert([payload]);
-      } else {
-        await IDB.queueOutbox('CASH_TRANSACTION', payload);
+    window.addEventListener('click', (e) => {
+      if (!catalogOverflow.classList.contains('hidden') && !catalogOverflow.contains(e.target) && e.target !== btnCatalogOverflow) {
+        catalogOverflow.classList.add('hidden');
       }
-    } catch (e) {
-      await IDB.queueOutbox('CASH_TRANSACTION', payload);
-    }
+    });
+  }
 
-    await IDB.putItem('cash_shifts', payload);
-    alert(`Cash ${actionType.toUpperCase()} of KES ${amount.toFixed(2)} recorded!`);
-    document.getElementById('inp-cash-action-amount').value = '';
-    document.getElementById('inp-cash-action-note').value = '';
-  };
+  const optMultiSelect = document.getElementById('opt-toggle-multi-select');
+  if (optMultiSelect) {
+    optMultiSelect.onclick = (e) => {
+      e.preventDefault();
+      catalogOverflow.classList.add('hidden');
+      isMultiSelectMode = !isMultiSelectMode;
+      selectedBatchIds.clear();
+      document.getElementById('catalog-batch-bar').classList.toggle('hidden', !isMultiSelectMode);
+      loadProductCatalogManagement();
+    };
+  }
 
-  // Add Product Form
+  const btnBatchCancel = document.getElementById('btn-batch-cancel');
+  if (btnBatchCancel) {
+    btnBatchCancel.onclick = () => {
+      isMultiSelectMode = false;
+      selectedBatchIds.clear();
+      document.getElementById('catalog-batch-bar').classList.add('hidden');
+      loadProductCatalogManagement();
+    };
+  }
+
+  const btnBatchDelete = document.getElementById('btn-batch-delete-confirm');
+  if (btnBatchDelete) {
+    btnBatchDelete.onclick = async () => {
+      if (!selectedBatchIds.size) return alert('No items selected.');
+      if (confirm(`Are you sure you want to delete ${selectedBatchIds.size} selected item(s)?`)) {
+        for (const id of selectedBatchIds) {
+          try {
+            if (navigator.onLine && supabase) {
+              await supabase.from('products').delete().eq('id', id);
+            } else {
+              await IDB.queueOutbox('DELETE_PRODUCT', { id });
+            }
+          } catch (e) {
+            await IDB.queueOutbox('DELETE_PRODUCT', { id });
+          }
+          await IDB.removeProduct(id);
+        }
+        alert('Selected items deleted.');
+        selectedBatchIds.clear();
+        isMultiSelectMode = false;
+        document.getElementById('catalog-batch-bar').classList.add('hidden');
+        await loadCatalogData();
+        loadProductCatalogManagement();
+      }
+    };
+  }
+
+  // Add / Edit Product Form Modal Trigger
   const modalAddProd = document.getElementById('modal-add-product');
   document.getElementById('btn-add-product-trigger').onclick = () => {
+    document.getElementById('prod-edit-id').value = '';
+    document.getElementById('lbl-modal-product-title').textContent = 'Add Product';
+    document.getElementById('prod-name').value = '';
+    document.getElementById('prod-retail-price').value = '';
+    document.getElementById('prod-cost-price').value = '';
+    document.getElementById('prod-sku').value = '';
+    document.getElementById('prod-initial-stock').value = '0';
+    document.getElementById('prod-existing-image-url').value = '';
+    document.getElementById('img-preview-thumb').classList.add('hidden');
+    document.getElementById('img-preview-placeholder').classList.remove('hidden');
+
     const sel = document.getElementById('prod-category-select');
-    sel.innerHTML = categoriesList.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+    sel.innerHTML = `<option value="">No Category</option>` + categoriesList.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
     modalAddProd.classList.remove('hidden');
     if (window.lucide) window.lucide.createIcons({ root: modalAddProd });
   };
+
   document.getElementById('btn-close-add-product').onclick = () => modalAddProd.classList.add('hidden');
 
   document.getElementById('btn-save-new-product').onclick = async (e) => {
     e.preventDefault();
+    const editId = document.getElementById('prod-edit-id').value;
     const name = document.getElementById('prod-name').value.trim();
     const price = parseFloat(document.getElementById('prod-retail-price').value) || 0;
     if (!name || price <= 0) return alert('Valid product name and price required.');
 
     const nowIso = new Date().toISOString();
-    const newProd = {
-      id: crypto.randomUUID(),
+    const prodId = editId || crypto.randomUUID();
+
+    // Upload product image if selected
+    const fileInput = document.getElementById('file-prod-image');
+    let imageUrl = document.getElementById('prod-existing-image-url').value || null;
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const uploadedUrl = await uploadProductImage(fileInput.files[0], prodId);
+      if (uploadedUrl) imageUrl = uploadedUrl;
+    }
+
+    const prodObj = {
+      id: prodId,
       shop_id: Auth.currentShop?.id,
       name: name,
       category_id: document.getElementById('prod-category-select').value || null,
@@ -435,36 +681,38 @@ function bindDrawerModules() {
       cost_price: parseFloat(document.getElementById('prod-cost-price').value) || 0,
       sku: document.getElementById('prod-sku').value.trim() || null,
       stock_quantity: parseFloat(document.getElementById('prod-initial-stock').value) || 0,
+      image_url: imageUrl,
       is_active: true,
-      created_at: nowIso,
       updated_at: nowIso
     };
 
+    if (!editId) prodObj.created_at = nowIso;
+
     try {
       if (navigator.onLine && supabase) {
-        await supabase.from('products').insert([newProd]);
-        // Also seed inventory row
-        await supabase.from('inventory').insert([{
-          shop_id: newProd.shop_id,
-          product_id: newProd.id,
-          quantity_on_hand: newProd.stock_quantity,
-          min_stock_level: 5.00
-        }]);
+        await supabase.from('products').upsert([prodObj]);
+        await supabase.from('inventory').upsert([{
+          shop_id: prodObj.shop_id,
+          product_id: prodObj.id,
+          quantity_on_hand: prodObj.stock_quantity,
+          min_stock_level: 5.00,
+          updated_at: nowIso
+        }], { onConflict: 'product_id' });
       } else {
-        await IDB.queueOutbox('CREATE_PRODUCT', newProd);
+        await IDB.queueOutbox(editId ? 'UPDATE_PRODUCT' : 'CREATE_PRODUCT', prodObj);
       }
     } catch (err) {
-      await IDB.queueOutbox('CREATE_PRODUCT', newProd);
+      await IDB.queueOutbox(editId ? 'UPDATE_PRODUCT' : 'CREATE_PRODUCT', prodObj);
     }
 
-    await IDB.putItem('cached_catalog', newProd);
-    alert('Product added successfully!');
+    await IDB.putItem('cached_catalog', prodObj);
+    alert(editId ? 'Product updated successfully!' : 'Product added successfully!');
     modalAddProd.classList.add('hidden');
     await loadCatalogData();
     loadProductCatalogManagement();
   };
 
-  // Add Category Modal / Prompt
+  // Category Creation / Prompt
   document.getElementById('btn-add-category-trigger').onclick = async () => {
     const catName = prompt('Enter New Category Name:');
     if (!catName || !catName.trim()) return;
@@ -492,122 +740,7 @@ function bindDrawerModules() {
     loadProductCatalogManagement();
   };
 
-  // Inventory: GRN (Goods Received Note)
-  document.getElementById('btn-commit-grn').onclick = async () => {
-    const pId = document.getElementById('grn-product-select').value;
-    const qty = parseFloat(document.getElementById('grn-qty').value) || 0;
-    const cost = parseFloat(document.getElementById('grn-unit-cost').value) || 0;
-    const ref = document.getElementById('grn-supplier-ref').value.trim();
-
-    if (!pId || qty <= 0) return alert('Select product and enter positive quantity.');
-
-    const log = {
-      id: crypto.randomUUID(),
-      shop_id: Auth.currentShop?.id,
-      product_id: pId,
-      transaction_type: 'GRN',
-      quantity: qty,
-      unit_cost: cost,
-      reference: ref,
-      created_at: new Date().toISOString()
-    };
-
-    try {
-      if (navigator.onLine && supabase) {
-        await supabase.from('inventory_transactions').insert([log]);
-        // Increment inventory
-        const { data: curInv } = await supabase.from('inventory').select('quantity_on_hand').eq('product_id', pId).single();
-        const curQty = curInv ? parseFloat(curInv.quantity_on_hand) || 0 : 0;
-        await supabase.from('inventory').upsert([{
-          shop_id: log.shop_id,
-          product_id: pId,
-          quantity_on_hand: curQty + qty,
-          updated_at: new Date().toISOString()
-        }], { onConflict: 'product_id' });
-      } else {
-        await IDB.queueOutbox('INVENTORY_LOG', log);
-      }
-    } catch (e) {
-      await IDB.queueOutbox('INVENTORY_LOG', log);
-    }
-
-    await IDB.putItem('inventory_logs', log);
-    alert(`GRN committed: +${qty} units added to stock!`);
-    document.getElementById('grn-qty').value = '';
-    await loadCatalogData();
-  };
-
-  // Inventory: SA (Stock Adjustment)
-  document.getElementById('btn-commit-sa').onclick = async () => {
-    const pId = document.getElementById('sa-product-select').value;
-    const saType = document.getElementById('sa-type').value;
-    const qty = parseFloat(document.getElementById('sa-qty').value) || 0;
-    const reason = document.getElementById('sa-reason').value.trim();
-
-    if (!pId || qty === 0) return alert('Select product and valid adjustment quantity.');
-
-    const log = {
-      id: crypto.randomUUID(),
-      shop_id: Auth.currentShop?.id,
-      product_id: pId,
-      transaction_type: `SA_${saType.toUpperCase()}`,
-      quantity: qty,
-      reference: reason,
-      created_at: new Date().toISOString()
-    };
-
-    try {
-      if (navigator.onLine && supabase) {
-        await supabase.from('inventory_transactions').insert([log]);
-      } else {
-        await IDB.queueOutbox('INVENTORY_LOG', log);
-      }
-    } catch (e) {
-      await IDB.queueOutbox('INVENTORY_LOG', log);
-    }
-
-    await IDB.putItem('inventory_logs', log);
-    alert('Stock adjustment recorded!');
-    document.getElementById('sa-qty').value = '';
-    await loadCatalogData();
-  };
-
-  // Inventory: TOG (Transfer of Goods)
-  document.getElementById('btn-commit-tog').onclick = async () => {
-    const dest = document.getElementById('tog-destination-branch').value.trim();
-    const pId = document.getElementById('tog-product-select').value;
-    const qty = parseFloat(document.getElementById('tog-qty').value) || 0;
-    const note = document.getElementById('tog-note').value.trim();
-
-    if (!dest || !pId || qty <= 0) return alert('Destination and transfer quantity required.');
-
-    const log = {
-      id: crypto.randomUUID(),
-      source_shop_id: Auth.currentShop?.id,
-      destination_shop: dest,
-      product_id: pId,
-      quantity: qty,
-      note: note,
-      status: 'dispatched',
-      created_at: new Date().toISOString()
-    };
-
-    try {
-      if (navigator.onLine && supabase) {
-        await supabase.from('stock_transfers').insert([log]);
-      } else {
-        await IDB.queueOutbox('STOCK_TRANSFER', log);
-      }
-    } catch (e) {
-      await IDB.queueOutbox('STOCK_TRANSFER', log);
-    }
-
-    await IDB.putItem('inventory_logs', log);
-    alert(`Transfer dispatched to ${dest}!`);
-    document.getElementById('tog-qty').value = '';
-  };
-
-  // Settings: Software & Printers
+  // Settings & Security PIN Handlers
   document.getElementById('btn-save-software-settings').onclick = () => {
     const cur = document.getElementById('set-currency').value.trim() || 'KES';
     const wake = document.getElementById('set-wakelock').value;
@@ -617,12 +750,22 @@ function bindDrawerModules() {
     alert(`Preferences saved! Base Currency: ${cur}`);
   };
 
-  document.getElementById('btn-save-printer-settings').onclick = () => {
-    alert('Printer configuration stored successfully.');
-  };
+  document.getElementById('btn-save-pin-settings').onclick = () => {
+    const isEnabled = document.getElementById('set-pin-enabled').value === 'enabled';
+    const pinCode = document.getElementById('set-pin-code').value.trim();
 
-  document.getElementById('btn-test-print').onclick = () => {
-    window.print();
+    if (isEnabled) {
+      if (!/^\d{4}$/.test(pinCode)) {
+        return alert('Security PIN must be exactly 4 numeric digits.');
+      }
+      appPinCode = pinCode;
+      localStorage.setItem('qs_pos_app_pin', appPinCode);
+      alert('Security PIN enabled successfully!');
+    } else {
+      appPinCode = null;
+      localStorage.removeItem('qs_pos_app_pin');
+      alert('Security PIN disabled.');
+    }
   };
 }
 
@@ -672,7 +815,6 @@ async function loadPastReceipts() {
     }
   }
 
-  // Fallback to local receipts
   const localReceipts = await IDB.getReceipts();
   if (localReceipts && localReceipts.length) {
     container.innerHTML = localReceipts.slice(-25).reverse().map((r) => `
@@ -697,21 +839,164 @@ async function loadProductCatalogManagement() {
   const products = await IDB.getCatalog();
   const categories = await IDB.getCategories();
 
-  pList.innerHTML = products.map((p) => `
-    <div class="product-list-row">
-      <div>
-        <strong>${p.name}</strong>
-        <div style="font-size:0.75rem; color:var(--text-muted);">Stock: ${p.stock_quantity ?? 0}</div>
+  pList.innerHTML = products.map((p) => {
+    const isChecked = selectedBatchIds.has(p.id) ? 'checked' : '';
+    const checkboxHtml = isMultiSelectMode 
+      ? `<input type="checkbox" class="batch-checkbox" data-id="${p.id}" ${isChecked} />` 
+      : '';
+
+    return `
+      <div class="product-list-row" style="padding:12px 16px;">
+        <div style="display:flex; align-items:center;">
+          ${checkboxHtml}
+          <div>
+            <strong>${p.name}</strong>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Stock: ${p.stock_quantity ?? 0} | ${Number(p.retail_price).toFixed(2)} KES</div>
+          </div>
+        </div>
+        <div class="item-row-actions">
+          <button type="button" class="icon-touch-btn btn-edit-product" data-id="${p.id}" aria-label="Edit Product">
+            <i data-lucide="edit-3" style="width:16px; height:16px; color:var(--primary-teal);"></i>
+          </button>
+          <button type="button" class="icon-touch-btn btn-del-product" data-id="${p.id}" aria-label="Delete Product">
+            <i data-lucide="trash-2" style="width:16px; height:16px; color:var(--danger-red);"></i>
+          </button>
+        </div>
       </div>
-      <strong>${Number(p.retail_price).toFixed(2)} KES</strong>
+    `;
+  }).join('');
+
+  cList.innerHTML = categories.map((c) => `
+    <div style="padding:12px; border-bottom:1px solid #e2e8f0; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
+      <span>${c.name}</span>
+      <div class="item-row-actions">
+        <button type="button" class="icon-touch-btn btn-edit-category" data-id="${c.id}" aria-label="Edit Category">
+          <i data-lucide="edit-3" style="width:16px; height:16px; color:var(--primary-teal);"></i>
+        </button>
+        <button type="button" class="icon-touch-btn btn-del-category" data-id="${c.id}" aria-label="Delete Category">
+          <i data-lucide="trash-2" style="width:16px; height:16px; color:var(--danger-red);"></i>
+        </button>
+      </div>
     </div>
   `).join('');
 
-  cList.innerHTML = categories.map((c) => `
-    <div style="padding:12px; border-bottom:1px solid #e2e8f0; font-weight:600;">
-      ${c.name}
-    </div>
-  `).join('');
+  if (window.lucide) window.lucide.createIcons({ root: pList });
+  if (window.lucide) window.lucide.createIcons({ root: cList });
+
+  // Bind batch checkboxes
+  pList.querySelectorAll('.batch-checkbox').forEach((cb) => {
+    cb.onchange = () => {
+      if (cb.checked) selectedBatchIds.add(cb.dataset.id);
+      else selectedBatchIds.delete(cb.dataset.id);
+      const countLbl = document.getElementById('lbl-batch-count');
+      if (countLbl) countLbl.textContent = `${selectedBatchIds.size} Selected`;
+    };
+  });
+
+  // Edit Product
+  pList.querySelectorAll('.btn-edit-product').forEach((btn) => {
+    btn.onclick = () => {
+      const p = products.find((item) => item.id === btn.dataset.id);
+      if (!p) return;
+      document.getElementById('prod-edit-id').value = p.id;
+      document.getElementById('lbl-modal-product-title').textContent = 'Edit Product';
+      document.getElementById('prod-name').value = p.name || '';
+      document.getElementById('prod-retail-price').value = p.retail_price ?? p.price ?? 0;
+      document.getElementById('prod-cost-price').value = p.cost_price ?? 0;
+      document.getElementById('prod-sku').value = p.sku || '';
+      document.getElementById('prod-initial-stock').value = p.stock_quantity ?? 0;
+      document.getElementById('prod-existing-image-url').value = p.image_url || '';
+
+      const thumb = document.getElementById('img-preview-thumb');
+      const placeholder = document.getElementById('img-preview-placeholder');
+      if (p.image_url) {
+        thumb.src = p.image_url;
+        thumb.classList.remove('hidden');
+        if (placeholder) placeholder.classList.add('hidden');
+      } else {
+        thumb.classList.add('hidden');
+        if (placeholder) placeholder.classList.remove('hidden');
+      }
+
+      const sel = document.getElementById('prod-category-select');
+      sel.innerHTML = `<option value="">No Category</option>` + categories.map((c) => 
+        `<option value="${c.id}" ${c.id === p.category_id ? 'selected' : ''}>${c.name}</option>`
+      ).join('');
+
+      document.getElementById('modal-add-product').classList.remove('hidden');
+    };
+  });
+
+  // Delete Product
+  pList.querySelectorAll('.btn-del-product').forEach((btn) => {
+    btn.onclick = async () => {
+      const p = products.find((item) => item.id === btn.dataset.id);
+      if (!p) return;
+      if (confirm(`Delete product '${p.name}'?`)) {
+        try {
+          if (navigator.onLine && supabase) {
+            await supabase.from('products').delete().eq('id', p.id);
+          } else {
+            await IDB.queueOutbox('DELETE_PRODUCT', { id: p.id });
+          }
+        } catch (e) {
+          await IDB.queueOutbox('DELETE_PRODUCT', { id: p.id });
+        }
+        await IDB.removeProduct(p.id);
+        alert('Product deleted.');
+        await loadCatalogData();
+        loadProductCatalogManagement();
+      }
+    };
+  });
+
+  // Edit Category
+  cList.querySelectorAll('.btn-edit-category').forEach((btn) => {
+    btn.onclick = async () => {
+      const c = categories.find((cat) => cat.id === btn.dataset.id);
+      if (!c) return;
+      const newName = prompt('Edit Category Name:', c.name);
+      if (!newName || !newName.trim()) return;
+
+      const updated = { ...c, name: newName.trim(), updated_at: new Date().toISOString() };
+      try {
+        if (navigator.onLine && supabase) {
+          await supabase.from('categories').upsert([updated]);
+        } else {
+          await IDB.queueOutbox('UPDATE_CATEGORY', updated);
+        }
+      } catch (e) {
+        await IDB.queueOutbox('UPDATE_CATEGORY', updated);
+      }
+      await IDB.upsertCategory(updated);
+      alert('Category updated.');
+      await loadCatalogData();
+      loadProductCatalogManagement();
+    };
+  });
+
+  // Delete Category
+  cList.querySelectorAll('.btn-del-category').forEach((btn) => {
+    btn.onclick = async () => {
+      const c = categories.find((cat) => cat.id === btn.dataset.id);
+      if (!c) return;
+      if (confirm(`Delete category '${c.name}'?`)) {
+        try {
+          if (navigator.onLine && supabase) {
+            await supabase.from('categories').delete().eq('id', c.id);
+          } else {
+            await IDB.queueOutbox('DELETE_CATEGORY', { id: c.id });
+          }
+        } catch (e) {
+          await IDB.queueOutbox('DELETE_CATEGORY', { id: c.id });
+        }
+        await IDB.removeCategory(c.id);
+        alert('Category deleted.');
+        await loadCatalogData();
+        loadProductCatalogManagement();
+      }
+    };
+  });
 }
 
 function populateInventoryDropdowns() {
@@ -725,7 +1010,6 @@ function populateInventoryDropdowns() {
   if (saSel) saSel.innerHTML = opts;
   if (togSel) togSel.innerHTML = opts;
 }
-
 // =========================================================================
 // Terminal Operations (Customizer, Search, Drawer & Tender)
 // =========================================================================
@@ -774,10 +1058,8 @@ function bindTerminalActions() {
     };
 
     window.addEventListener('click', (e) => {
-      if (!overflow.classList.contains('hidden')) {
-        if (!overflow.contains(e.target) && e.target !== openOverflow) {
-          overflow.classList.add('hidden');
-        }
+      if (!overflow.classList.contains('hidden') && !overflow.contains(e.target) && e.target !== openOverflow) {
+        overflow.classList.add('hidden');
       }
     });
   }
@@ -802,20 +1084,27 @@ function bindTerminalActions() {
     };
   }
 
-  // Ticket Discount Tag Button
+  const optLock = document.getElementById('opt-lock-terminal');
+  if (optLock) {
+    optLock.onclick = (e) => {
+      e.preventDefault();
+      if (overflow) overflow.classList.add('hidden');
+      lockTerminalPin();
+    };
+  }
+
   const ticketDiscBtn = document.getElementById('btn-apply-ticket-discount');
   if (ticketDiscBtn) {
     ticketDiscBtn.onclick = (e) => {
       e.preventDefault();
       const curDiscount = Cart.ticketDiscount || 0;
-      const entered = prompt('Enter order discount amount (in KES):', curDiscount > 0 ? curDiscount : '');
+      const entered = prompt('Enter order discount amount:', curDiscount > 0 ? curDiscount : '');
       if (entered !== null) {
         Cart.setTicketDiscount(entered);
       }
     };
   }
 
-  // Search Toggle
   const searchWrap = document.getElementById('search-input-wrap');
   const searchInput = document.getElementById('inp-pos-search');
   const toggleSearch = document.getElementById('btn-toggle-search');
@@ -845,7 +1134,6 @@ function bindTerminalActions() {
     if (catSelect) catSelect.onchange = filterCatalog;
   }
 
-  // Customizer Modal
   const modalCust = document.getElementById('modal-item-customizer');
   const closeCust = document.getElementById('btn-close-customizer');
   if (closeCust && modalCust) {
@@ -870,27 +1158,6 @@ function bindTerminalActions() {
     };
   }
 
-  const discFixed = document.getElementById('btn-disc-mode-fixed');
-  const discPct = document.getElementById('btn-disc-mode-pct');
-  if (discFixed && discPct) {
-    discFixed.onclick = (e) => {
-      e.preventDefault();
-      customDiscountMode = 'fixed';
-      discFixed.style.background = 'var(--primary-teal-light)';
-      discFixed.style.color = 'var(--primary-teal-dark)';
-      discPct.style.background = '#f1f5f9';
-      discPct.style.color = 'var(--text-main)';
-    };
-    discPct.onclick = (e) => {
-      e.preventDefault();
-      customDiscountMode = 'pct';
-      discPct.style.background = 'var(--primary-teal-light)';
-      discPct.style.color = 'var(--primary-teal-dark)';
-      discFixed.style.background = '#f1f5f9';
-      discFixed.style.color = 'var(--text-main)';
-    };
-  }
-
   const confirmAdd = document.getElementById('btn-confirm-item-add');
   if (confirmAdd && modalCust) {
     confirmAdd.onclick = (e) => {
@@ -906,7 +1173,6 @@ function bindTerminalActions() {
     };
   }
 
-  // Customer Selector Modal & Add Customer Actions
   const modalCustList = document.getElementById('modal-customer');
   const openCust = document.getElementById('btn-open-customer-modal');
   const closeCustList = document.getElementById('btn-close-customer');
@@ -932,7 +1198,6 @@ function bindTerminalActions() {
 
   bindCustomerModalActions();
 
-  // Tender Checkout Modal
   const modalTender = document.getElementById('modal-tender');
   const chargeBtn = document.getElementById('btn-charge-ticket');
   const closeTender = document.getElementById('btn-close-tender');
@@ -952,31 +1217,6 @@ function bindTerminalActions() {
     closeTender.onclick = (e) => {
       e.preventDefault();
       modalTender.classList.add('hidden');
-    };
-  }
-
-  const paySelect = document.getElementById('tender-payment-method');
-  const cashFields = document.getElementById('tender-cash-fields');
-  const refFields = document.getElementById('tender-ref-fields');
-  const cashPaidInput = document.getElementById('inp-tender-cash-paid');
-
-  if (paySelect && cashFields && refFields) {
-    paySelect.onchange = () => {
-      if (paySelect.value === 'cash') {
-        cashFields.classList.remove('hidden');
-        refFields.classList.add('hidden');
-      } else {
-        cashFields.classList.add('hidden');
-        refFields.classList.remove('hidden');
-      }
-    };
-  }
-
-  if (cashPaidInput) {
-    cashPaidInput.oninput = () => {
-      const paid = parseFloat(cashPaidInput.value) || 0;
-      const total = Cart.getTotals().grandTotal;
-      document.getElementById('lbl-tender-change').textContent = Math.max(0, paid - total).toFixed(2);
     };
   }
 
@@ -1001,15 +1241,6 @@ function openItemCustomizer(product) {
   document.getElementById('inp-custom-remark').value = '';
 
   customDiscountMode = 'pct';
-  const discFixed = document.getElementById('btn-disc-mode-fixed');
-  const discPct = document.getElementById('btn-disc-mode-pct');
-  if (discFixed && discPct) {
-    discPct.style.background = 'var(--primary-teal-light)';
-    discPct.style.color = 'var(--primary-teal-dark)';
-    discFixed.style.background = '#f1f5f9';
-    discFixed.style.color = 'var(--text-main)';
-  }
-
   modal.classList.remove('hidden');
 }
 
@@ -1030,21 +1261,23 @@ async function syncEverything() {
 }
 
 // =========================================================================
-// Authentication Execution
+// Authentication Execution & Dynamic Country Selection
 // =========================================================================
 function bindAuthFlows() {
-  const wireToggle = (btnId, inpId) => {
-    const btn = document.getElementById(btnId);
-    const inp = document.getElementById(inpId);
-    if (btn && inp) {
-      btn.onclick = (e) => {
-        e.preventDefault();
-        inp.type = inp.type === 'password' ? 'text' : 'password';
-      };
-    }
-  };
-  wireToggle('toggle-pwd-login', 'login-password');
-  wireToggle('toggle-pwd-reg', 'reg-password');
+  const regCountrySelect = document.getElementById('reg-country');
+  if (regCountrySelect) {
+    regCountrySelect.onchange = () => {
+      const selected = regCountrySelect.options[regCountrySelect.selectedIndex];
+      const flag = selected.dataset.flag || '🇰🇪';
+      const code = selected.dataset.code || '+254';
+      
+      const flagLbl = document.getElementById('lbl-reg-flag');
+      const phoneInp = document.getElementById('reg-phone');
+
+      if (flagLbl) flagLbl.textContent = flag;
+      if (phoneInp) phoneInp.placeholder = `${code} 7...`;
+    };
+  }
 
   const formLogin = document.getElementById('form-mobile-login');
   if (formLogin) {
@@ -1083,7 +1316,7 @@ function bindAuthFlows() {
       const bizName = document.getElementById('reg-biz-name').value.trim();
       const bizType = document.getElementById('reg-biz-type').value;
       const phone = document.getElementById('reg-phone').value.trim();
-      const country = document.getElementById('reg-country').value;
+      const country = regCountrySelect?.value || 'Kenya';
 
       try {
         await Auth.signUp(email, password, fullName, bizName, bizType, phone, country);
@@ -1096,70 +1329,6 @@ function bindAuthFlows() {
       } finally {
         btn.disabled = false;
         btn.textContent = 'SUBMIT';
-      }
-    };
-  }
-
-  const formOtp = document.getElementById('form-mobile-otp');
-  if (formOtp) {
-    formOtp.onsubmit = async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('btn-verify-otp');
-      btn.disabled = true;
-      btn.textContent = 'VERIFYING...';
-
-      const token = document.getElementById('inp-otp-code').value.trim();
-
-      try {
-        await Auth.verifySignUpOTP(pendingEmail, token);
-        bootTerminal();
-      } catch (err) {
-        alert(err.message || 'Invalid or expired 8-digit OTP code.');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'CONFIRM & LOGIN';
-      }
-    };
-  }
-
-  const linkForgot = document.getElementById('link-goto-forgot');
-  if (linkForgot) {
-    linkForgot.onclick = (e) => {
-      e.preventDefault();
-      Router.navigate('forgot');
-    };
-  }
-
-  const formForgot = document.getElementById('form-mobile-forgot');
-  if (formForgot) {
-    formForgot.onsubmit = async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('forgot-email').value.trim();
-      try {
-        await Auth.requestPasswordReset(email);
-        pendingEmail = email;
-        alert('Password recovery OTP sent to your email.');
-        Router.navigate('reset-password');
-      } catch (err) {
-        alert(err.message);
-      }
-    };
-  }
-
-  const formResetPass = document.getElementById('form-mobile-reset-pass');
-  if (formResetPass) {
-    formResetPass.onsubmit = async (e) => {
-      e.preventDefault();
-      const token = document.getElementById('reset-otp-token').value.trim();
-      const newPass = document.getElementById('reset-new-password').value;
-
-      try {
-        await Auth.verifyPasswordResetOTP(pendingEmail, token);
-        await Auth.updatePassword(newPass);
-        alert('Password reset successfully. Please sign in.');
-        Router.navigate('signin');
-      } catch (err) {
-        alert(err.message || 'Reset verification failed.');
       }
     };
   }
@@ -1227,12 +1396,10 @@ async function commitSaleTransaction() {
     payments: paymentsPayload
   };
 
-  // 1. Decrement stock in IndexedDB immediately for instant offline UI update
   for (const item of itemsPayload) {
     await IDB.decrementLocalStock(item.product_id, item.quantity);
   }
 
-  // 2. Commit transaction
   try {
     let pushedOnline = false;
 
@@ -1246,8 +1413,6 @@ async function commitSaleTransaction() {
       if (!rpcErr) {
         pushedOnline = true;
       } else {
-        console.warn('[Sale] RPC failed, trying fallback tables:', rpcErr.message);
-        // Fallback directly to tables if RPC encounters an issue
         const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
         if (!orderErr) {
           if (itemsPayload.length) await supabase.from('order_items').insert(itemsPayload);
@@ -1261,7 +1426,6 @@ async function commitSaleTransaction() {
       await IDB.saveOfflineOrder(fullOrder);
     }
 
-    // Save copy to local receipt cache
     await IDB.saveReceipt(fullOrder);
 
     alert(`Sale completed! Receipt No: ${receiptNo}`);
@@ -1269,7 +1433,6 @@ async function commitSaleTransaction() {
     Cart.clearTicket(false);
     await loadCatalogData();
   } catch (err) {
-    console.warn('Network transaction write failed, queued locally:', err);
     await IDB.saveOfflineOrder(fullOrder);
     await IDB.saveReceipt(fullOrder);
     alert(`Network unavailable. Sale queued locally! Receipt No: ${receiptNo}`);

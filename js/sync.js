@@ -24,7 +24,6 @@ export const SyncEngine = {
       if (this.onStatusChangeCallback) this.onStatusChangeCallback(false);
     });
 
-    // Start background sync and realtime channels if shop is known
     this.startBackgroundSync();
   },
 
@@ -46,7 +45,6 @@ export const SyncEngine = {
       this.setupRealtimeListeners(shopId);
     }
 
-    // Trigger initial delta fetch and pending queue flush
     if (navigator.onLine) {
       this.pullDeltas();
       this.syncPendingData();
@@ -99,7 +97,7 @@ export const SyncEngine = {
           window.dispatchEvent(new CustomEvent('catalog-updated', { detail: payload }));
         }
       )
-      // Inventory updates (e.g., changes made in back-office)
+      // Inventory updates
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inventory', filter: `shop_id=eq.${shopId}` },
@@ -188,28 +186,49 @@ export const SyncEngine = {
     window.dispatchEvent(new CustomEvent('sync-started'));
 
     try {
-      // 1. Process Outbox Queue (New Customers, Shifts, etc.)
+      // 1. Process Outbox Queue (Mutations made while offline)
       const outbox = await IDB.getOutbox();
       for (const item of outbox) {
         try {
-          if (item.type === 'CREATE_CUSTOMER') {
-            const { error: custErr } = await supabase
-              .from('customers')
-              .upsert(item.payload, { onConflict: 'id' });
-            if (custErr) throw custErr;
-            await IDB.removeOutboxItem(item.id);
-          } else if (item.type === 'SALE_ORDER') {
+          // Customers
+          if (item.type === 'CREATE_CUSTOMER' || item.type === 'UPDATE_CUSTOMER') {
+            const { error: err } = await supabase.from('customers').upsert([item.payload], { onConflict: 'id' });
+            if (err) throw err;
+          } else if (item.type === 'DELETE_CUSTOMER') {
+            const { error: err } = await supabase.from('customers').delete().eq('id', item.payload.id);
+            if (err) throw err;
+          }
+          // Products
+          else if (item.type === 'CREATE_PRODUCT' || item.type === 'UPDATE_PRODUCT') {
+            const { error: err } = await supabase.from('products').upsert([item.payload], { onConflict: 'id' });
+            if (err) throw err;
+          } else if (item.type === 'DELETE_PRODUCT') {
+            const { error: err } = await supabase.from('products').delete().eq('id', item.payload.id);
+            if (err) throw err;
+          }
+          // Categories
+          else if (item.type === 'CREATE_CATEGORY' || item.type === 'UPDATE_CATEGORY') {
+            const { error: err } = await supabase.from('categories').upsert([item.payload], { onConflict: 'id' });
+            if (err) throw err;
+          } else if (item.type === 'DELETE_CATEGORY') {
+            const { error: err } = await supabase.from('categories').delete().eq('id', item.payload.id);
+            if (err) throw err;
+          }
+          // Offline Sale Orders
+          else if (item.type === 'SALE_ORDER') {
             const { error: saleErr } = await supabase.rpc('process_pos_sale', {
               p_order: item.payload.order,
               p_items: item.payload.items,
               p_payments: item.payload.payments
             });
             if (saleErr) throw saleErr;
-            await IDB.removeOutboxItem(item.id);
           }
+
+          // Successfully synchronized online -> remove from outbox
+          await IDB.removeOutboxItem(item.id);
         } catch (err) {
-          console.warn(`[Sync] Outbox item ${item.id} error:`, err);
-          break; // Stop queue processing to maintain transaction order
+          console.warn(`[Sync] Outbox item ${item.id} (${item.type}) error:`, err);
+          break; // Stop outbox processing to maintain transaction order
         }
       }
 
@@ -257,7 +276,6 @@ export const SyncEngine = {
           created_at: pay.created_at || order.created_at || new Date().toISOString()
         }));
 
-        // Try the atomic RPC first
         let pushSuccess = false;
         try {
           const { error: rpcErr } = await supabase.rpc('process_pos_sale', {
@@ -275,7 +293,6 @@ export const SyncEngine = {
           console.warn('[Sync] RPC exception, falling back to direct tables:', rpcEx);
         }
 
-        // Direct table fallback if RPC fails
         if (!pushSuccess) {
           const { error: orderErr } = await supabase.from('orders').upsert([orderPayload]);
           if (orderErr) {
@@ -292,7 +309,6 @@ export const SyncEngine = {
           }
         }
 
-        // 3. Remove from offline queue and cache into local receipts
         await IDB.removeOfflineOrder(order.id);
         await IDB.saveReceipt(order);
       }
