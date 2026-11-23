@@ -145,6 +145,13 @@ export const IDB = {
     });
   },
 
+  // Remove everything read-only that belongs to the previous user/company (pending offline sales are kept)
+  async clearReadCaches() {
+    for (const storeName of ['cached_catalog', 'cached_inventory', 'cached_categories', 'cached_customers', 'cached_receipts']) {
+      try { await this.setAll(storeName, []); } catch (e) { /* store may not exist yet */ }
+    }
+  },
+
   // Atomically decrement local inventory for instant offline UI feedback
   async decrementLocalStock(productId, qty) {
     await this.ensureDb();
