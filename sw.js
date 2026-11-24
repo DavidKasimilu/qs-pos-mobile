@@ -1,4 +1,4 @@
-const CACHE_NAME = 'qs-pos-mobile-direct-v4';
+const CACHE_NAME = 'qs-pos-mobile-direct-v5';
 
 const CRITICAL_ASSETS = [
   './',

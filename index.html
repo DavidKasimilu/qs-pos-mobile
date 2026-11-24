@@ -88,22 +88,32 @@
         <h2 style="color:var(--primary-teal); font-size:1.25rem; font-weight:800;">SIGN IN</h2>
       </div>
       <form id="form-mobile-login">
+        <div style="display:flex; gap:8px; margin-bottom:18px;">
+          <button type="button" id="btn-login-mode-password" class="btn-primary-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">PASSWORD</button>
+          <button type="button" id="btn-login-mode-pin" class="btn-outline-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">PIN</button>
+        </div>
         <div class="form-underline-group">
           <label>Email</label>
           <div class="underline-input-wrap">
             <input type="email" id="login-email" required autocomplete="email" />
           </div>
         </div>
-        <div class="form-underline-group">
+        <div class="form-underline-group hidden" id="group-login-pin">
+          <label>4-digit PIN</label>
+          <div class="underline-input-wrap">
+            <input type="password" id="login-pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" style="letter-spacing:8px; font-weight:700;" />
+          </div>
+        </div>
+        <div class="form-underline-group" id="group-login-password">
           <label>Password</label>
           <div class="underline-input-wrap">
-            <input type="password" id="login-password" required autocomplete="current-password" />
+            <input type="password" id="login-password" autocomplete="current-password" />
             <button type="button" class="icon-touch-btn trailing-btn" id="toggle-pwd-login" aria-label="Toggle Password Visibility">
               <i data-lucide="eye"></i>
             </button>
           </div>
         </div>
-        <div style="text-align:right; margin-top:-14px; margin-bottom:20px;">
+        <div id="row-forgot-link" style="text-align:right; margin-top:-14px; margin-bottom:20px;">
           <a href="#" id="link-goto-forgot" style="font-size:0.8rem; color:var(--primary-teal); text-decoration:none; font-weight:600;">Forgot Password?</a>
         </div>
         <button type="submit" class="btn-primary-blue" id="btn-submit-login">SUBMIT</button>
