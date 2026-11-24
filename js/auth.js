@@ -138,6 +138,31 @@ export const Auth = {
     return data;
   },
 
+  // Email + 4-digit PIN. The server checks the PIN (hashed, lockouts, throttling) and returns a one-time
+  // token that is exchanged for a normal session, so row-level security applies exactly as with a password.
+  async signInWithPin(email, pin) {
+    const GENERIC = 'Invalid email or PIN, or too many attempts. Please try again later.';
+    let res;
+    try {
+      res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/pin-auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: CONFIG.SUPABASE_ANON_KEY },
+        body: JSON.stringify({ action: 'login', email, pin }),
+      });
+    } catch (e) {
+      throw new Error('PIN sign-in needs an internet connection. Use your password, or try again when online.');
+    }
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.token_hash) throw new Error(payload.error || GENERIC);
+
+    const { error } = await supabase.auth.verifyOtp({ token_hash: payload.token_hash, type: 'magiclink' });
+    if (error) throw new Error(GENERIC);
+
+    const state = await this.syncSession();
+    if (!state) throw new Error(this.lastRejection || 'Sign-in could not be completed.');
+    return true;
+  },
+
   async signUp(email, password, fullName, businessName, businessType, phone, country) {
     const { data, error } = await supabase.auth.signUp({
       email,

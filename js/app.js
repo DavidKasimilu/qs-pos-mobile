@@ -750,7 +750,7 @@ function bindDrawerModules() {
     alert(`Preferences saved! Base Currency: ${cur}`);
   };
 
-  document.getElementById('btn-save-pin-settings').onclick = () => {
+  document.getElementById('btn-save-pin-settings').onclick = async () => {
     const isEnabled = document.getElementById('set-pin-enabled').value === 'enabled';
     const pinCode = document.getElementById('set-pin-code').value.trim();
 
@@ -758,12 +758,22 @@ function bindDrawerModules() {
       if (!/^\d{4}$/.test(pinCode)) {
         return alert('Security PIN must be exactly 4 numeric digits.');
       }
+      // The same PIN also becomes the sign-in PIN (stored hashed on the server).
+      // The server refuses easy PINs such as 1234 or 0000.
+      const { error: pinErr } = await supabase.rpc('set_my_pin', { p_pin: pinCode });
+      if (pinErr) {
+        const noSignInPin = /only available for cashier and staff/i.test(pinErr.message);
+        if (!noSignInPin) return alert(pinErr.message);
+      }
       appPinCode = pinCode;
       localStorage.setItem('qs_pos_app_pin', appPinCode);
-      alert('Security PIN enabled successfully!');
+      alert(pinErr
+        ? 'Security PIN enabled for this device.'
+        : 'Security PIN enabled. You can also sign in with your email and this PIN.');
     } else {
       appPinCode = null;
       localStorage.removeItem('qs_pos_app_pin');
+      try { await supabase.rpc('clear_my_pin'); } catch (e) { /* offline: the lock is still removed on this device */ }
       alert('Security PIN disabled.');
     }
   };
@@ -1281,6 +1291,32 @@ function bindAuthFlows() {
 
   const formLogin = document.getElementById('form-mobile-login');
   if (formLogin) {
+    let loginMode = 'password';   // 'password' | 'pin'
+    const btnModePwd = document.getElementById('btn-login-mode-password');
+    const btnModePin = document.getElementById('btn-login-mode-pin');
+    const groupPwd = document.getElementById('group-login-password');
+    const groupPin = document.getElementById('group-login-pin');
+    const rowForgot = document.getElementById('row-forgot-link');
+
+    const setLoginMode = (mode) => {
+      loginMode = mode;
+      const isPin = mode === 'pin';
+      groupPwd?.classList.toggle('hidden', isPin);
+      groupPin?.classList.toggle('hidden', !isPin);
+      rowForgot?.classList.toggle('hidden', isPin);
+      if (btnModePwd) btnModePwd.className = isPin ? 'btn-outline-blue' : 'btn-primary-blue';
+      if (btnModePin) btnModePin.className = isPin ? 'btn-primary-blue' : 'btn-outline-blue';
+      [btnModePwd, btnModePin].forEach((b) => { if (b) b.style.cssText = 'flex:1; padding:10px 0; font-size:0.8rem;'; });
+      localStorage.setItem('qs_pos_login_mode', mode);
+    };
+    if (btnModePwd) btnModePwd.onclick = () => setLoginMode('password');
+    if (btnModePin) btnModePin.onclick = () => setLoginMode('pin');
+
+    // terminals: remember the last email and the last sign-in method (never the password or PIN)
+    const lastEmail = localStorage.getItem('qs_pos_last_email');
+    if (lastEmail) document.getElementById('login-email').value = lastEmail;
+    setLoginMode(localStorage.getItem('qs_pos_login_mode') === 'pin' ? 'pin' : 'password');
+
     formLogin.onsubmit = async (e) => {
       e.preventDefault();
       const btn = document.getElementById('btn-submit-login');
@@ -1288,10 +1324,19 @@ function bindAuthFlows() {
       btn.textContent = 'SIGNING IN...';
 
       const email = document.getElementById('login-email').value.trim();
-      const pwd = document.getElementById('login-password').value;
 
       try {
-        await Auth.signIn(email, pwd);
+        if (loginMode === 'pin') {
+          const pin = document.getElementById('login-pin').value.trim();
+          if (!/^\d{4}$/.test(pin)) throw new Error('Enter your 4-digit PIN.');
+          await Auth.signInWithPin(email, pin);
+          document.getElementById('login-pin').value = '';
+        } else {
+          const pwd = document.getElementById('login-password').value;
+          if (!pwd) throw new Error('Enter your password.');
+          await Auth.signIn(email, pwd);
+        }
+        localStorage.setItem('qs_pos_last_email', email);
         bootTerminal();
       } catch (err) {
         alert(err.message || 'Invalid email or password.');

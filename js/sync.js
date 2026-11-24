@@ -277,6 +277,7 @@ export const SyncEngine = {
         }));
 
         let pushSuccess = false;
+        let rpcRejected = false;
         try {
           const { error: rpcErr } = await supabase.rpc('process_pos_sale', {
             p_order: orderPayload,
@@ -286,12 +287,19 @@ export const SyncEngine = {
 
           if (!rpcErr) {
             pushSuccess = true;
+          } else if (/^(P0001|42501|22|23)/.test(String(rpcErr.code || ''))) {
+            // The server REFUSED this sale (not allowed, bad data, wrong store...). Do not bypass its checks with
+            // direct inserts (that would skip stock deduction). Keep it pending and surface it.
+            console.warn('[Sync] Sale rejected by the server, kept pending:', rpcErr.message);
+            rpcRejected = true;
           } else {
-            console.warn('[Sync] RPC failed, falling back to direct table inserts:', rpcErr.message);
+            console.warn('[Sync] RPC unavailable, falling back to direct table inserts:', rpcErr.message);
           }
         } catch (rpcEx) {
           console.warn('[Sync] RPC exception, falling back to direct tables:', rpcEx);
         }
+
+        if (!pushSuccess && rpcRejected) continue;
 
         if (!pushSuccess) {
           const { error: orderErr } = await supabase.from('orders').upsert([orderPayload]);
