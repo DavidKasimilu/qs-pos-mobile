@@ -4,6 +4,7 @@ import { CONFIG } from './config.js';
 import { Router } from './router.js';
 import { Auth, supabase } from './auth.js';
 import { Cart } from './cart.js';
+import { Shift, showNotice } from './shift.js';
 
 let pendingEmail = '';
 let currentCustomizingProduct = null;
@@ -13,7 +14,10 @@ let categoriesList = [];
 let isMultiSelectMode = false;
 let selectedBatchIds = new Set();
 let pinEntryBuffer = '';
-let appPinCode = localStorage.getItem('qs_pos_app_pin') || null;
+// The old on-device screen-lock PIN is retired: "Lock terminal" now signs the person out so the next staff member
+// can sign in with their own email + PIN, and the PIN is only used for signing in (stored hashed on the server).
+let appPinCode = null;
+try { localStorage.removeItem('qs_pos_app_pin'); } catch (e) { /* ignore */ }
 
 document.addEventListener('DOMContentLoaded', async () => {
   Router.init();
@@ -121,6 +125,13 @@ function verifyPinCode() {
     pinEntryBuffer = '';
     document.querySelectorAll('.pin-dot').forEach((d) => d.classList.remove('filled'));
   }
+}
+
+async function lockTerminal() {
+  if (Cart.items.length && !confirm('Locking the terminal clears the current ticket. Continue?')) return;
+  try { await Cart.clearTicket(false); } catch (e) { /* ignore */ }
+  Shift.stop();
+  await Auth.lockTerminal();
 }
 
 function lockTerminalPin() {
@@ -266,6 +277,7 @@ function bootTerminal() {
 
   Router.navigate('pos');
   loadCatalogData();
+  Shift.start();   // checks the shop's shift; asks to start one when none is open
 }
 
 async function loadCatalogData() {
@@ -753,28 +765,23 @@ function bindDrawerModules() {
   document.getElementById('btn-save-pin-settings').onclick = async () => {
     const isEnabled = document.getElementById('set-pin-enabled').value === 'enabled';
     const pinCode = document.getElementById('set-pin-code').value.trim();
+    const role = String(Auth.currentProfile?.role || '').toLowerCase();
+
+    if (!['cashier', 'staff'].includes(role)) {
+      return alert('PIN sign-in is for cashiers and staff. Administrators and managers sign in with their password.');
+    }
+    if (!navigator.onLine) return alert('Connect to the internet to change your sign-in PIN.');
 
     if (isEnabled) {
-      if (!/^\d{4}$/.test(pinCode)) {
-        return alert('Security PIN must be exactly 4 numeric digits.');
-      }
-      // The same PIN also becomes the sign-in PIN (stored hashed on the server).
-      // The server refuses easy PINs such as 1234 or 0000.
+      if (!/^\d{4}$/.test(pinCode)) return alert('The PIN must be exactly 4 digits.');
       const { error: pinErr } = await supabase.rpc('set_my_pin', { p_pin: pinCode });
-      if (pinErr) {
-        const noSignInPin = /only available for cashier and staff/i.test(pinErr.message);
-        if (!noSignInPin) return alert(pinErr.message);
-      }
-      appPinCode = pinCode;
-      localStorage.setItem('qs_pos_app_pin', appPinCode);
-      alert(pinErr
-        ? 'Security PIN enabled for this device.'
-        : 'Security PIN enabled. You can also sign in with your email and this PIN.');
+      if (pinErr) return alert(pinErr.message);
+      document.getElementById('set-pin-code').value = '';
+      alert('Sign-in PIN saved. You can now sign in with your email and this PIN.');
     } else {
-      appPinCode = null;
-      localStorage.removeItem('qs_pos_app_pin');
-      try { await supabase.rpc('clear_my_pin'); } catch (e) { /* offline: the lock is still removed on this device */ }
-      alert('Security PIN disabled.');
+      const { error: clearErr } = await supabase.rpc('clear_my_pin');
+      if (clearErr) return alert(clearErr.message);
+      alert('Sign-in PIN removed. Use your password to sign in.');
     }
   };
 }
@@ -1099,9 +1106,10 @@ function bindTerminalActions() {
     optLock.onclick = (e) => {
       e.preventDefault();
       if (overflow) overflow.classList.add('hidden');
-      lockTerminalPin();
+      lockTerminal();
     };
   }
+  window.addEventListener('qs:lock-terminal', () => lockTerminal());
 
   const ticketDiscBtn = document.getElementById('btn-apply-ticket-discount');
   if (ticketDiscBtn) {
@@ -1214,6 +1222,11 @@ function bindTerminalActions() {
   if (chargeBtn && modalTender && closeTender) {
     chargeBtn.onclick = (e) => {
       e.preventDefault();
+      if (!Shift.allowsSales()) {
+        window.dispatchEvent(new CustomEvent('qs:need-shift'));
+        alert('Start a shift before making sales.');
+        return;
+      }
       if (!Cart.items.length) {
         alert('Your ticket is empty. Tap an item to add it to the ticket.');
         return;
@@ -1339,7 +1352,15 @@ function bindAuthFlows() {
         localStorage.setItem('qs_pos_last_email', email);
         bootTerminal();
       } catch (err) {
-        alert(err.message || 'Invalid email or password.');
+        if (err.code === 'use_password') {
+          showNotice({
+            title: 'Use your password',
+            message: err.message,
+            actions: [{ label: 'USE PASSWORD', primary: true, onClick: () => setLoginMode('password') }],
+          });
+        } else {
+          alert(err.message || 'Invalid email or password.');
+        }
       } finally {
         btn.disabled = false;
         btn.textContent = 'SUBMIT';
@@ -1384,6 +1405,11 @@ function bindAuthFlows() {
 // =========================================================================
 async function commitSaleTransaction() {
   const commitBtn = document.getElementById('btn-commit-tender');
+  if (!Shift.allowsSales()) {
+    window.dispatchEvent(new CustomEvent('qs:need-shift'));
+    alert('Start a shift before making sales.');
+    return;
+  }
   commitBtn.disabled = true;
   commitBtn.textContent = 'PROCESSING...';
 
@@ -1399,7 +1425,7 @@ async function commitSaleTransaction() {
     shop_id: Auth.currentShop?.id,
     cashier_id: Auth.currentUser?.id,
     customer_id: Cart.selectedCustomer?.id || null,
-    shift_id: null,
+    shift_id: Shift.state.shift?.id || null,
     receipt_no: receiptNo,
     subtotal: totals.subtotal,
     discount_amount: totals.discountAmount,
@@ -1447,6 +1473,7 @@ async function commitSaleTransaction() {
 
   try {
     let pushedOnline = false;
+    let refusedMessage = null;
 
     if (navigator.onLine && supabase) {
       const { error: rpcErr } = await supabase.rpc('process_pos_sale', {
@@ -1457,6 +1484,9 @@ async function commitSaleTransaction() {
 
       if (!rpcErr) {
         pushedOnline = true;
+      } else if (/^(P0001|42501|22|23)/.test(String(rpcErr.code || ''))) {
+        // The server REFUSED the sale (no shift, shift closed, wrong store...). Never bypass that with direct inserts.
+        refusedMessage = rpcErr.message;
       } else {
         const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
         if (!orderErr) {
@@ -1465,6 +1495,15 @@ async function commitSaleTransaction() {
           pushedOnline = true;
         }
       }
+    }
+
+    if (refusedMessage) {
+      // put the local stock back (it was reduced optimistically), refresh the shift and keep the ticket for a retry
+      try { if (Auth.currentShop?.id) await Auth.refreshLocalCatalog(Auth.currentShop.id); } catch (e) { /* ignore */ }
+      await loadCatalogData();
+      await Shift.refresh();
+      alert(`Sale not completed: ${refusedMessage}`);
+      return;
     }
 
     if (!pushedOnline) {

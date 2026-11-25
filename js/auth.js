@@ -38,16 +38,6 @@ export const Auth = {
           return this.restoreCachedSession();
         }
 
-        // A different person on this device: wipe the previous user's cached company data first
-        const cacheOwner = localStorage.getItem('qs_pos_cache_owner');
-        if (cacheOwner && cacheOwner !== session.user.id) {
-          await IDB.clearReadCaches();
-          localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP);
-          localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHIFT);
-          localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_CART);
-        }
-        localStorage.setItem('qs_pos_cache_owner', session.user.id);
-
         this.currentUser = session.user;
         this.lastRejection = '';
 
@@ -75,6 +65,15 @@ export const Auth = {
           localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP);
           return null;
         }
+
+        // Catalog/customer caches belong to the SHOP (several staff share one tablet). A different shop => wipe.
+        const cacheShop = localStorage.getItem('qs_pos_cache_shop');
+        if (cacheShop && cacheShop !== profile.shops.id) {
+          await IDB.clearReadCaches();
+          localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_CART);
+          localStorage.removeItem('qs_pos_shift_cache');
+        }
+        localStorage.setItem('qs_pos_cache_shop', profile.shops.id);
 
         this.currentProfile = profile;
         this.currentShop = profile.shops;
@@ -153,6 +152,19 @@ export const Auth = {
       throw new Error('PIN sign-in needs an internet connection. Use your password, or try again when online.');
     }
     const payload = await res.json().catch(() => ({}));
+
+    // Admins, owners and managers must use their password
+    if (payload.error === 'use_password') {
+      const e = new Error(payload.message || 'This is an admin account. Please sign in with your password.');
+      e.code = 'use_password';
+      throw e;
+    }
+    if (res.status === 404) {
+      throw new Error('PIN sign-in is not set up on the server yet (the pin-auth function is not deployed). Please use your password.');
+    }
+    if ((res.status === 401 || res.status === 403) && !payload.error) {
+      throw new Error('PIN sign-in is blocked by the server (Verify JWT must be switched off for the pin-auth function). Please use your password.');
+    }
     if (!res.ok || !payload.token_hash) throw new Error(payload.error || GENERIC);
 
     const { error } = await supabase.auth.verifyOtp({ token_hash: payload.token_hash, type: 'magiclink' });
@@ -247,6 +259,21 @@ export const Auth = {
     } catch (err) {
       console.warn('[Catalog] Refresh deferred (offline):', err.message);
     }
+  },
+
+  // "Lock terminal": the next staff member signs in with their own email + PIN. The shift stays open (it belongs
+  // to the shop), the catalog stays cached and unsynced sales stay queued on the device.
+  async lockTerminal() {
+    SyncEngine.destroy();
+    try { await supabase.auth.signOut(); } catch (e) { /* offline: the local session is removed anyway */ }
+    this.currentUser = null;
+    this.currentProfile = null;
+    this.currentShop = null;
+    localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_USER);
+    localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE);
+    localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP);
+    localStorage.setItem('qs_pos_login_mode', 'pin');
+    window.location.reload();
   },
 
   async signOut() {

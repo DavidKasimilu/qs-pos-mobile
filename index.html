@@ -691,12 +691,12 @@
 
     <!-- Security PIN Setup -->
     <div id="tab-settings-security" class="tab-content hidden" style="flex:1; overflow-y:auto; padding:16px;">
-      <h4 style="font-size:0.95rem; margin-bottom:12px; color:var(--text-main);">App Security PIN</h4>
+      <h4 style="font-size:0.95rem; margin-bottom:12px; color:var(--text-main);">Sign-in PIN</h4>
       <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:20px;">
-        Set a 4-digit PIN code to lock the application when installed or left idle.
+        Set a 4-digit PIN to sign in quickly with your email + PIN when the terminal is locked or shared. Cashiers and staff only; administrators and managers use their password.
       </p>
       <div class="form-underline-group">
-        <label>Enable Security PIN</label>
+        <label>Sign-in PIN</label>
         <div class="underline-input-wrap">
           <select id="set-pin-enabled">
             <option value="disabled" selected>Disabled</option>
@@ -710,7 +710,7 @@
           <input type="password" id="set-pin-code" maxlength="4" pattern="[0-9]{4}" placeholder="••••" style="letter-spacing:6px; font-weight:700;" />
         </div>
       </div>
-      <button type="button" class="btn-primary-blue" id="btn-save-pin-settings">SAVE SECURITY PIN</button>
+      <button type="button" class="btn-primary-blue" id="btn-save-pin-settings">SAVE SIGN-IN PIN</button>
     </div>
   </section>
   <!-- ===================================================================== -->

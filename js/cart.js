@@ -16,6 +16,12 @@ export const Cart = {
   },
 
   addItem(product, quantity = 1, customPrice = null, discountVal = 0, discountType = 'pct', remark = '') {
+    // No open shift => nothing can be sold (the database enforces this too)
+    if (window.__qsSalesBlocked) {
+      window.dispatchEvent(new CustomEvent('qs:need-shift'));
+      return false;
+    }
+
     // Resolve price gracefully across schema variations
     const rawPrice = customPrice !== null && customPrice !== undefined && customPrice !== '' 
       ? customPrice 
