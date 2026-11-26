@@ -559,6 +559,7 @@ function bindDrawerModules() {
       else if (target === 'sales') {
         Router.navigate('sales');
         loadPastReceipts();
+        refreshCashTab();
       }
       else if (target === 'products') {
         Router.navigate('products');
@@ -573,6 +574,7 @@ function bindDrawerModules() {
   });
 
   bindTabSwitching('data-sales-tab', 'tab-sales-');
+  document.querySelector('[data-sales-tab="cash"]')?.addEventListener('click', refreshCashTab);
   bindTabSwitching('data-prod-tab', 'tab-prod-');
   bindTabSwitching('data-inv-tab', 'tab-inv-');
   bindTabSwitching('data-settings-tab', 'tab-settings-');
@@ -808,45 +810,140 @@ function bindTabSwitching(dataAttr, prefix) {
   });
 }
 
+const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtMoney = (n) => (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let receiptCache = new Map();
+
+function receiptRowHtml(r, offline) {
+  const t = new Date(r.created_at);
+  const label = `${t.toLocaleDateString([], { day: '2-digit', month: 'short' })} ${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  return `
+    <div class="receipt-row" data-receipt-id="${escHtml(r.id)}" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+      <div>
+        <strong>${escHtml(r.receipt_no)}</strong>
+        <div style="font-size:0.75rem; color:var(--text-muted);">${label}${offline ? ' (Offline)' : ''}</div>
+      </div>
+      <strong style="color:var(--primary-teal-dark);">${fmtMoney(r.total)} KES</strong>
+    </div>`;
+}
+
 async function loadPastReceipts() {
   const container = document.getElementById('receipts-list-container');
+  receiptCache = new Map();
+  let rows = null;
+  let offline = false;
+
   if (navigator.onLine && supabase && Auth.currentShop?.id) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('orders')
       .select('*')
       .eq('shop_id', Auth.currentShop.id)
       .order('created_at', { ascending: false })
       .limit(25);
-
-    if (data && data.length) {
-      container.innerHTML = data.map((r) => `
-        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <strong>${r.receipt_no}</strong>
-            <div style="font-size:0.75rem; color:var(--text-muted);">${new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-          </div>
-          <strong style="color:var(--primary-teal-dark);">${Number(r.total).toFixed(2)} KES</strong>
-        </div>
-      `).join('');
-      return;
-    }
+    if (!error && data && data.length) rows = data;
   }
 
-  const localReceipts = await IDB.getReceipts();
-  if (localReceipts && localReceipts.length) {
-    container.innerHTML = localReceipts.slice(-25).reverse().map((r) => `
-      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <strong>${r.receipt_no}</strong>
-          <div style="font-size:0.75rem; color:var(--text-muted);">${new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (Offline)</div>
-        </div>
-        <strong style="color:var(--primary-teal-dark);">${Number(r.total).toFixed(2)} KES</strong>
-      </div>
-    `).join('');
+  if (!rows) {
+    const local = await IDB.getReceipts();
+    if (local && local.length) { rows = local.slice(-25).reverse(); offline = true; }
+  }
+
+  if (!rows) {
+    container.innerHTML = `<p style="text-align:center; padding:30px; color:var(--text-muted);">No sales recorded today.</p>`;
     return;
   }
 
-  container.innerHTML = `<p style="text-align:center; padding:30px; color:var(--text-muted);">No sales recorded today.</p>`;
+  rows.forEach((r) => receiptCache.set(String(r.id), r));
+  container.innerHTML = rows.map((r) => receiptRowHtml(r, offline)).join('');
+  container.querySelectorAll('.receipt-row').forEach((el) => {
+    el.onclick = () => openReceiptDetails(el.dataset.receiptId);
+  });
+}
+
+async function openReceiptDetails(orderId) {
+  const order = receiptCache.get(String(orderId));
+  if (!order) return;
+
+  let items = Array.isArray(order.items) ? order.items : null;
+  let payments = Array.isArray(order.payments) ? order.payments : null;
+
+  if ((!items || !payments) && navigator.onLine && supabase) {
+    const [it, pay] = await Promise.all([
+      supabase.from('order_items').select('*').eq('order_id', order.id),
+      supabase.from('payments').select('*').eq('order_id', order.id),
+    ]);
+    if (!it.error) items = it.data;
+    if (!pay.error) payments = pay.data;
+  }
+  items = items || [];
+  payments = payments || [];
+
+  const cur = escHtml(Auth.currentShop?.currency || 'KES');
+  const line = (label, value, strong) => `
+    <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:0.9rem;">
+      <span style="color:#64748b;">${label}</span>
+      <span style="${strong ? 'font-weight:800; color:#0f172a;' : 'font-weight:600; color:#334155;'}">${value}</span>
+    </div>`;
+
+  const itemsHtml = items.length
+    ? items.map((i) => `
+        <div style="display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid #f1f5f9;">
+          <div style="min-width:0;">
+            <div style="font-weight:600; color:#0f172a;">${escHtml(i.product_name || 'Item')}</div>
+            <div style="font-size:0.75rem; color:#64748b;">${Number(i.quantity)} x ${fmtMoney(i.unit_price)}</div>
+          </div>
+          <strong style="white-space:nowrap;">${fmtMoney(i.total ?? Number(i.quantity) * Number(i.unit_price))}</strong>
+        </div>`).join('')
+    : `<p style="color:#64748b; font-size:0.85rem; margin:8px 0;">Item details are not available for this receipt${navigator.onLine ? '.' : ' while offline.'}</p>`;
+
+  const payHtml = payments.map((p) => line(
+    `${escHtml(String(p.payment_method || '').replace(/_/g, ' ').toUpperCase())}${p.reference_code ? ' (' + escHtml(p.reference_code) + ')' : ''}`,
+    `${fmtMoney(p.amount)} ${cur}`
+  )).join('');
+
+  document.getElementById('qs-receipt-modal')?.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'qs-receipt-modal';
+  wrap.style.cssText = 'position:fixed; inset:0; z-index:9800; background:rgba(15,23,42,.55); display:flex; align-items:flex-end; justify-content:center;';
+  wrap.innerHTML = `
+    <div style="background:#fff; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:20px 20px 28px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h3 style="margin:0; font-size:1.1rem;">${escHtml(order.receipt_no)}</h3>
+        <button type="button" id="qs-receipt-x" style="border:0; background:#f1f5f9; border-radius:8px; padding:6px 12px; font-weight:700;">Close</button>
+      </div>
+      <div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">
+        ${new Date(order.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+        ${order.order_status && order.order_status !== 'completed' ? ' - ' + escHtml(order.order_status) : ''}
+      </div>
+      <div style="font-size:0.75rem; font-weight:800; color:#0f766e; letter-spacing:.06em; margin-bottom:2px;">ITEMS SOLD</div>
+      ${itemsHtml}
+      <div style="margin-top:12px;">
+        ${line('Subtotal', `${fmtMoney(order.subtotal)} ${cur}`)}
+        ${Number(order.discount_amount) ? line('Discount', `-${fmtMoney(order.discount_amount)} ${cur}`) : ''}
+        ${Number(order.tax_amount) ? line('Tax', `${fmtMoney(order.tax_amount)} ${cur}`) : ''}
+        ${line('Total', `${fmtMoney(order.total)} ${cur}`, true)}
+      </div>
+      ${payHtml ? `<div style="font-size:0.75rem; font-weight:800; color:#0f766e; letter-spacing:.06em; margin:14px 0 2px;">PAYMENT</div>${payHtml}` : ''}
+    </div>`;
+  document.body.appendChild(wrap);
+  wrap.querySelector('#qs-receipt-x').onclick = () => wrap.remove();
+  wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
+}
+
+// Cash Management tab: live drawer balance for the current shift (server totals, refreshed on open)
+async function refreshCashTab() {
+  const lbl = document.getElementById('lbl-shift-drawer-cash');
+  if (!lbl) return;
+  const cur = Auth.currentShop?.currency || 'KES';
+  await Shift.refresh();
+  const s = Shift.state.shift;
+  if (!s) {
+    lbl.textContent = 'No shift open';
+    return;
+  }
+  const t = s.totals || {};
+  const expected = t.expected_cash ?? (Number(s.opening_cash || 0) + Number(t.cash_sales || 0) + Number(t.cash_in || 0) - Number(t.cash_out || 0));
+  lbl.textContent = `${fmtMoney(expected)} ${cur}`;
 }
 
 async function loadProductCatalogManagement() {
