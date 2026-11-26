@@ -671,13 +671,11 @@
         <label>Printer Connection</label>
         <div class="underline-input-wrap">
           <select id="set-printer-type">
-            <option value="bluetooth">Bluetooth ESC/POS</option>
-            <option value="usb">USB / OTG Thermal</option>
-            <option value="network">Network IP Printer</option>
-            <option value="system">Android System Dialog</option>
+            <option value="system" selected>Android Print Dialog</option>
           </select>
         </div>
       </div>
+      <p style="font-size:0.75rem; color:var(--text-muted); margin:-4px 0 14px;">Bluetooth, USB and network thermal printers work through the Android print service (for example RawBT, or your printer maker's print plugin). Install it, pair the printer, then pick it in the print dialog.</p>
       <div class="form-underline-group">
         <label>Paper Width</label>
         <div class="underline-input-wrap">
