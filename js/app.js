@@ -8,6 +8,8 @@ import { Shift, showNotice } from './shift.js';
 import { Currency } from './currency.js';
 import { Prefs, Device } from './prefs.js';
 import { printReceipt, printTestReceipt } from './receipt.js';
+import { Checkout } from './checkout.js';
+import { openShareDialog } from './share.js';
 
 let pendingEmail = '';
 let currentCustomizingProduct = null;
@@ -579,8 +581,7 @@ function bindDrawerModules() {
     };
   });
 
-  bindTabSwitching('data-sales-tab', 'tab-sales-');
-  document.querySelector('[data-sales-tab="cash"]')?.addEventListener('click', refreshCashTab);
+  bindReceiptScreens();
   document.getElementById('btn-save-cash-action')?.addEventListener('click', saveCashAction);
   bindTabSwitching('data-prod-tab', 'tab-prod-');
   bindTabSwitching('data-inv-tab', 'tab-inv-');
@@ -883,60 +884,94 @@ function bindTabSwitching(dataAttr, prefix) {
 const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtMoney = (n) => (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 let receiptCache = new Map();
+let receiptRows = [];
+let receiptsOffline = false;
+let receiptDate = '';      // YYYY-MM-DD filter, '' = latest
+let receiptQuery = '';
+const employeeNames = new Map();
+let currentView = null;    // { order, items, payments }
 
-function receiptRowHtml(r, offline) {
-  const t = new Date(r.created_at);
-  const label = `${t.toLocaleDateString([], { day: '2-digit', month: 'short' })} ${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  return `
-    <div class="receipt-row" data-receipt-id="${escHtml(r.id)}" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-      <div>
-        <strong>${escHtml(r.receipt_no)}</strong>
-        <div style="font-size:0.75rem; color:var(--text-muted);">${label}${offline ? ' (Offline)' : ''}</div>
-      </div>
-      <strong style="color:var(--primary-teal-dark);">${fmtMoney(r.total)} ${escHtml(Currency.code)}</strong>
-    </div>`;
+const dayLabel = (d) => d.toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' });
+
+function renderReceiptList() {
+  const container = document.getElementById('receipts-list-container');
+  const q = receiptQuery.trim().toLowerCase().replace(/,/g, '');
+  const rows = !q ? receiptRows : receiptRows.filter((r) =>
+    String(r.receipt_no || '').toLowerCase().includes(q) || String(Number(r.total) || 0).includes(q) || fmtMoney(r.total).replace(/,/g, '').includes(q));
+
+  if (!rows.length) {
+    container.innerHTML = `<div class="rc-empty">${receiptRows.length ? 'No receipts match your search.' : (receiptDate ? 'No receipts on this day.' : 'No sales recorded yet.')}</div>`;
+    return;
+  }
+  let lastDay = '';
+  container.innerHTML = rows.map((r) => {
+    const t = new Date(r.created_at);
+    const day = dayLabel(t);
+    const head = day !== lastDay ? `<div class="rc-day">${escHtml(day)}</div>` : '';
+    lastDay = day;
+    return `${head}
+      <div class="rc-row receipt-row" data-receipt-id="${escHtml(r.id)}">
+        <div class="rc-no">Receipt: ${escHtml(r.receipt_no)}${receiptsOffline ? ' (offline)' : ''}</div>
+        <div class="rc-amt">${fmtMoney(r.total)}<div class="rc-time">${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></div>
+      </div>`;
+  }).join('');
+  container.querySelectorAll('.receipt-row').forEach((el) => { el.onclick = () => openReceiptView(el.dataset.receiptId); });
 }
 
 async function loadPastReceipts() {
   const container = document.getElementById('receipts-list-container');
   receiptCache = new Map();
+  receiptRows = [];
+  receiptsOffline = false;
   let rows = null;
-  let offline = false;
+
+  const chip = document.getElementById('receipt-date-chip');
+  if (receiptDate) {
+    document.getElementById('receipt-date-chip-text').textContent = dayLabel(new Date(`${receiptDate}T00:00:00`));
+    chip.classList.remove('hidden');
+  } else {
+    chip.classList.add('hidden');
+  }
+  const dayStart = receiptDate ? new Date(`${receiptDate}T00:00:00`) : null;
+  const dayEnd = dayStart ? new Date(dayStart.getTime() + 86400000) : null;
 
   if (navigator.onLine && supabase && Auth.currentShop?.id) {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('shop_id', Auth.currentShop.id)
-      .order('created_at', { ascending: false })
-      .limit(25);
-    if (!error && data && data.length) rows = data;
+    let query = supabase.from('orders').select('*').eq('shop_id', Auth.currentShop.id);
+    if (dayStart) query = query.gte('created_at', dayStart.toISOString()).lt('created_at', dayEnd.toISOString());
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(300);
+    if (!error && data) rows = data;
   }
 
   if (!rows) {
-    const local = await IDB.getReceipts();
-    if (local && local.length) { rows = local.slice(-25).reverse(); offline = true; }
+    const local = (await IDB.getReceipts()) || [];
+    rows = local.slice().reverse().filter((r) => !dayStart || (new Date(r.created_at) >= dayStart && new Date(r.created_at) < dayEnd));
+    receiptsOffline = true;
   }
 
-  if (!rows) {
-    container.innerHTML = `<p style="text-align:center; padding:30px; color:var(--text-muted);">No sales recorded today.</p>`;
-    return;
-  }
-
+  receiptRows = rows;
   rows.forEach((r) => receiptCache.set(String(r.id), r));
-  container.innerHTML = rows.map((r) => receiptRowHtml(r, offline)).join('');
-  container.querySelectorAll('.receipt-row').forEach((el) => {
-    el.onclick = () => openReceiptDetails(el.dataset.receiptId);
-  });
+  renderReceiptList();
 }
 
-async function openReceiptDetails(orderId) {
+async function employeeName(order) {
+  if (!order.cashier_id) return '';
+  if (order.cashier_id === Auth.currentUser?.id && Auth.currentProfile?.full_name) return Auth.currentProfile.full_name;
+  if (employeeNames.has(order.cashier_id)) return employeeNames.get(order.cashier_id);
+  let name = '';
+  if (navigator.onLine && supabase) {
+    const { data } = await supabase.from('profiles').select('full_name').eq('id', order.cashier_id).maybeSingle();
+    name = data?.full_name || '';
+  }
+  employeeNames.set(order.cashier_id, name);
+  return name;
+}
+
+async function openReceiptView(orderId) {
   const order = receiptCache.get(String(orderId));
   if (!order) return;
 
   let items = Array.isArray(order.items) ? order.items : null;
   let payments = Array.isArray(order.payments) ? order.payments : null;
-
   if ((!items || !payments) && navigator.onLine && supabase) {
     const [it, pay] = await Promise.all([
       supabase.from('order_items').select('*').eq('order_id', order.id),
@@ -947,61 +982,83 @@ async function openReceiptDetails(orderId) {
   }
   items = items || [];
   payments = payments || [];
+  currentView = { order, items, payments };
 
+  const [name, catalog] = await Promise.all([employeeName(order), IDB.getCatalog().catch(() => [])]);
+  const skuById = new Map((catalog || []).map((p) => [String(p.id), p.sku]));
   const cur = escHtml(Currency.code);
-  const line = (label, value, strong) => `
-    <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:0.9rem;">
-      <span style="color:#64748b;">${label}</span>
-      <span style="${strong ? 'font-weight:800; color:#0f172a;' : 'font-weight:600; color:#334155;'}">${value}</span>
-    </div>`;
+  const METHOD_LABELS = { cash: 'Cash', mpesa: 'Mobile Money', card: 'Card' };
+  const totalQty = items.reduce((s, i) => s + Number(i.quantity || 0), 0);
 
-  const itemsHtml = items.length
-    ? items.map((i) => `
-        <div style="display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid #f1f5f9;">
-          <div style="min-width:0;">
-            <div style="font-weight:600; color:#0f172a;">${escHtml(i.product_name || 'Item')}</div>
-            <div style="font-size:0.75rem; color:#64748b;">${Number(i.quantity)} x ${fmtMoney(i.unit_price)}</div>
-          </div>
-          <strong style="white-space:nowrap;">${fmtMoney(i.total ?? Number(i.quantity) * Number(i.unit_price))}</strong>
-        </div>`).join('')
-    : `<p style="color:#64748b; font-size:0.85rem; margin:8px 0;">Item details are not available for this receipt${navigator.onLine ? '.' : ' while offline.'}</p>`;
+  document.getElementById('rv-title').textContent = order.receipt_no;
+  document.getElementById('rv-body').innerHTML = `
+    <div class="rv-total"><strong>${fmtMoney(order.total)}</strong><span>${cur}</span></div>
+    <div class="rv-meta">
+      <div>Receipt: ${escHtml(order.receipt_no)}</div>
+      ${name ? `<div>Employee: ${escHtml(name)}</div>` : ''}
+      <div>Date: ${escHtml(dayLabel(new Date(order.created_at)))} ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+      ${order.order_status && order.order_status !== 'completed' ? `<div>Status: ${escHtml(order.order_status)}</div>` : ''}
+    </div>
+    <div class="rv-th"><span>Product Price</span><span>Qty</span><span>Total (${cur})</span></div>
+    ${items.length ? items.map((i) => {
+      const sku = skuById.get(String(i.product_id));
+      return `<div class="rv-item">
+        <div>${escHtml(i.product_name || 'Item')}${sku ? ` <small>- ${escHtml(sku)}</small>` : ''}</div>
+        <div class="rv-line"><span>${fmtMoney(i.unit_price)}</span><span>${Number(i.quantity)}</span><span>${fmtMoney(i.total ?? Number(i.quantity) * Number(i.unit_price))}</span></div>
+      </div>`;
+    }).join('') : `<div class="rv-item" style="color:#6b7280;">Item details are not available for this receipt${navigator.onLine ? '.' : ' while offline.'}</div>`}
+    <div class="rv-sum"><span>Subtotal</span><span>${fmtMoney(order.subtotal)}</span></div>
+    ${Number(order.discount_amount) ? `<div class="rv-count"><span>Discount</span><span>-${fmtMoney(order.discount_amount)}</span></div>` : ''}
+    ${Number(order.tax_amount) ? `<div class="rv-count"><span>Tax</span><span>${fmtMoney(order.tax_amount)}</span></div>` : ''}
+    <div class="rv-count"><span>Product: ${items.length}</span><span>Qty: ${totalQty}</span></div>
+    <div class="rv-grand"><div><span>Grand total</span><span>${fmtMoney(order.total)}</span></div></div>
+    ${payments.map((p) => `<div class="rv-pay"><div>${escHtml(METHOD_LABELS[p.payment_method] || String(p.payment_method || '').toUpperCase())}${p.reference_code ? `<small>Ref: ${escHtml(p.reference_code)}</small>` : ''}</div><span>${fmtMoney(p.amount)}</span></div>`).join('')}`;
 
-  const payHtml = payments.map((p) => line(
-    `${escHtml(String(p.payment_method || '').replace(/_/g, ' ').toUpperCase())}${p.reference_code ? ' (' + escHtml(p.reference_code) + ')' : ''}`,
-    `${fmtMoney(p.amount)} ${cur}`
-  )).join('');
+  document.getElementById('rv-menu').classList.add('hidden');
+  document.getElementById('screen-receipt-view').classList.remove('hidden');
+}
 
-  document.getElementById('qs-receipt-modal')?.remove();
-  const wrap = document.createElement('div');
-  wrap.id = 'qs-receipt-modal';
-  wrap.style.cssText = 'position:fixed; inset:0; z-index:9800; background:rgba(15,23,42,.55); display:flex; align-items:flex-end; justify-content:center;';
-  wrap.innerHTML = `
-    <div style="background:#fff; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:20px 20px 28px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        <h3 style="margin:0; font-size:1.1rem;">${escHtml(order.receipt_no)}</h3>
-        <div style="display:flex; gap:8px;">
-          <button type="button" id="qs-receipt-print" style="border:0; background:#0f766e; color:#fff; border-radius:8px; padding:6px 14px; font-weight:700;">Print</button>
-          <button type="button" id="qs-receipt-x" style="border:0; background:#f1f5f9; border-radius:8px; padding:6px 12px; font-weight:700;">Close</button>
-        </div>
-      </div>
-      <div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">
-        ${new Date(order.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-        ${order.order_status && order.order_status !== 'completed' ? ' - ' + escHtml(order.order_status) : ''}
-      </div>
-      <div style="font-size:0.75rem; font-weight:800; color:#0f766e; letter-spacing:.06em; margin-bottom:2px;">ITEMS SOLD</div>
-      ${itemsHtml}
-      <div style="margin-top:12px;">
-        ${line('Subtotal', `${fmtMoney(order.subtotal)} ${cur}`)}
-        ${Number(order.discount_amount) ? line('Discount', `-${fmtMoney(order.discount_amount)} ${cur}`) : ''}
-        ${Number(order.tax_amount) ? line('Tax', `${fmtMoney(order.tax_amount)} ${cur}`) : ''}
-        ${line('Total', `${fmtMoney(order.total)} ${cur}`, true)}
-      </div>
-      ${payHtml ? `<div style="font-size:0.75rem; font-weight:800; color:#0f766e; letter-spacing:.06em; margin:14px 0 2px;">PAYMENT</div>${payHtml}` : ''}
-    </div>`;
-  document.body.appendChild(wrap);
-  wrap.querySelector('#qs-receipt-x').onclick = () => wrap.remove();
-  wrap.querySelector('#qs-receipt-print').onclick = () => printReceipt(order, items, payments);
-  wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
+function bindReceiptScreens() {
+  const menu = document.getElementById('rv-menu');
+  document.getElementById('btn-rv-back').onclick = () => { menu.classList.add('hidden'); document.getElementById('screen-receipt-view').classList.add('hidden'); };
+  document.getElementById('btn-rv-menu').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); };
+  menu.querySelectorAll('[data-rv]').forEach((b) => {
+    b.onclick = async () => {
+      menu.classList.add('hidden');
+      if (!currentView) return;
+      const { order, items, payments } = currentView;
+      if (b.dataset.rv === 'print') return printReceipt(order, items, payments);
+      let email = '';
+      if (b.dataset.rv === 'send') {
+        const customers = await IDB.getCustomers().catch(() => []);
+        email = (customers || []).find((c) => c.id === order.customer_id)?.email || '';
+      }
+      openShareDialog(order, items, payments, b.dataset.rv === 'send' ? { mode: 'email', email } : {});
+    };
+  });
+
+  // title dropdown: Past receipts / Cash management
+  const titleMenu = document.getElementById('sales-title-menu');
+  document.getElementById('sales-title-btn').onclick = (e) => { e.stopPropagation(); titleMenu.classList.toggle('hidden'); };
+  titleMenu.querySelectorAll('[data-sales-tab]').forEach((b) => {
+    b.onclick = () => {
+      const tab = b.dataset.salesTab;
+      titleMenu.classList.add('hidden');
+      document.getElementById('sales-title').textContent = tab === 'cash' ? 'Cash management' : 'Past receipts';
+      document.getElementById('btn-receipts-date').classList.toggle('hidden', tab === 'cash');
+      document.querySelectorAll('#screen-sales .tab-content').forEach((c) => c.classList.add('hidden'));
+      document.getElementById(`tab-sales-${tab}`).classList.remove('hidden');
+      if (tab === 'cash') refreshCashTab(); else loadPastReceipts();
+    };
+  });
+  document.addEventListener('click', () => { menu.classList.add('hidden'); titleMenu.classList.add('hidden'); });
+
+  // search + date
+  document.getElementById('inp-receipt-search').oninput = (e) => { receiptQuery = e.target.value; renderReceiptList(); };
+  const dateInput = document.getElementById('inp-receipt-date');
+  document.getElementById('btn-receipts-date').onclick = () => { try { dateInput.showPicker(); } catch (err) { dateInput.click(); } };
+  dateInput.onchange = () => { receiptDate = dateInput.value; loadPastReceipts(); };
+  document.getElementById('btn-clear-receipt-date').onclick = () => { receiptDate = ''; dateInput.value = ''; loadPastReceipts(); };
 }
 
 // Cash Management tab: live drawer balance + cash in/out entries for the current shift
@@ -1464,10 +1521,12 @@ function bindTerminalActions() {
 
   bindCustomerModalActions();
 
-  const modalTender = document.getElementById('modal-tender');
   const chargeBtn = document.getElementById('btn-charge-ticket');
-  const closeTender = document.getElementById('btn-close-tender');
-  if (chargeBtn && modalTender && closeTender) {
+  Checkout.init({
+    commit: (payments) => commitSaleTransaction(payments),
+    onNewSale: () => { /* ticket was cleared when the sale was recorded */ },
+  });
+  if (chargeBtn) {
     chargeBtn.onclick = (e) => {
       e.preventDefault();
       if (!Shift.allowsSales()) {
@@ -1479,23 +1538,7 @@ function bindTerminalActions() {
         alert('Your ticket is empty. Tap an item to add it to the ticket.');
         return;
       }
-      const totals = Cart.getTotals();
-      document.getElementById('tender-grand-total').textContent = `${fmtMoney(totals.grandTotal)} ${Currency.code}`;
-      document.getElementById('inp-tender-cash-paid').value = totals.grandTotal.toFixed(2);
-      document.getElementById('lbl-tender-change').textContent = '0.00';
-      modalTender.classList.remove('hidden');
-    };
-    closeTender.onclick = (e) => {
-      e.preventDefault();
-      modalTender.classList.add('hidden');
-    };
-  }
-
-  const commitTender = document.getElementById('btn-commit-tender');
-  if (commitTender) {
-    commitTender.onclick = async (e) => {
-      e.preventDefault();
-      await commitSaleTransaction();
+      Checkout.open();
     };
   }
 }
@@ -1651,11 +1694,6 @@ function bindAuthFlows() {
 // =========================================================================
 // Commit Sale Transaction
 // =========================================================================
-function offerReceiptPrint(order) {
-  const auto = Prefs.get().autoPrint === 'yes';
-  if (auto || confirm('Print receipt?')) printReceipt(order, order.items, order.payments);
-}
-
 function loadSettingsControls() {
   const p = Prefs.get();
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
@@ -1666,19 +1704,16 @@ function loadSettingsControls() {
   set('set-auto-print', p.autoPrint);
 }
 
-async function commitSaleTransaction() {
-  const commitBtn = document.getElementById('btn-commit-tender');
+// Records the sale. `payments` = [{ method, amount, ref }] (one entry, or several for a split payment).
+// Returns { order, synced } on success, or null when the sale was refused (the checkout screen stays open).
+async function commitSaleTransaction(payments) {
   if (!Shift.allowsSales()) {
     window.dispatchEvent(new CustomEvent('qs:need-shift'));
     alert('Start a shift before making sales.');
-    return;
+    return null;
   }
-  commitBtn.disabled = true;
-  commitBtn.textContent = 'PROCESSING...';
 
   const totals = Cart.getTotals();
-  const paymentMethod = document.getElementById('tender-payment-method').value;
-  const refCode = document.getElementById('inp-tender-ref-code').value.trim();
   const receiptNo = `QS-M-${Date.now().toString().slice(-7)}`;
   const orderId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
@@ -1714,15 +1749,21 @@ async function commitSaleTransaction() {
     total: i.total,
   }));
 
-  const paymentsPayload = [{
+  const parts = (payments && payments.length ? payments : [{ method: 'cash', amount: totals.grandTotal, ref: '' }])
+    .map((p) => ({ method: p.method, amount: Number(p.amount) || 0, ref: (p.ref || '').trim() }));
+  // keep the payments adding up exactly to the order total (cents rounding)
+  const diff = Math.round((totals.grandTotal - parts.reduce((s, p) => s + p.amount, 0)) * 100) / 100;
+  if (diff !== 0) parts[parts.length - 1].amount = Math.round((parts[parts.length - 1].amount + diff) * 100) / 100;
+
+  const paymentsPayload = parts.map((p) => ({
     id: crypto.randomUUID(),
     order_id: orderId,
-    payment_method: paymentMethod,
-    amount: totals.grandTotal,
-    reference_no: refCode || null,
-    reference_code: refCode || null,
+    payment_method: p.method,
+    amount: p.amount,
+    reference_no: p.ref || null,
+    reference_code: p.ref || null,
     created_at: nowIso,
-  }];
+  }));
 
   const fullOrder = {
     ...orderPayload,
@@ -1734,8 +1775,8 @@ async function commitSaleTransaction() {
     await IDB.decrementLocalStock(item.product_id, item.quantity);
   }
 
+  let pushedOnline = false;
   try {
-    let pushedOnline = false;
     let refusedMessage = null;
 
     if (navigator.onLine && supabase) {
@@ -1767,32 +1808,19 @@ async function commitSaleTransaction() {
       await Shift.refresh();
       Device.warn();
       alert(`Sale not completed: ${refusedMessage}`);
-      return;
+      return null;
     }
 
     if (!pushedOnline) {
       await IDB.saveOfflineOrder(fullOrder);
     }
-
-    await IDB.saveReceipt(fullOrder);
-
-    Device.success();
-    alert(`Sale completed! Receipt No: ${receiptNo}`);
-    document.getElementById('modal-tender').classList.add('hidden');
-    Cart.clearTicket(false);
-    await loadCatalogData();
-    offerReceiptPrint(fullOrder);
   } catch (err) {
     await IDB.saveOfflineOrder(fullOrder);
-    await IDB.saveReceipt(fullOrder);
-    Device.success();
-    alert(`Network unavailable. Sale queued locally! Receipt No: ${receiptNo}`);
-    document.getElementById('modal-tender').classList.add('hidden');
-    Cart.clearTicket(false);
-    await loadCatalogData();
-    offerReceiptPrint(fullOrder);
-  } finally {
-    commitBtn.disabled = false;
-    commitBtn.textContent = 'COMPLETE SALE';
+    pushedOnline = false;
   }
+
+  await IDB.saveReceipt(fullOrder);
+  Cart.clearTicket(false);
+  await loadCatalogData();
+  return { order: fullOrder, synced: pushedOnline };
 }

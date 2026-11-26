@@ -5,7 +5,7 @@ import { Currency } from './currency.js';
 import { Prefs } from './prefs.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const METHODS = { cash: 'Cash', mpesa: 'M-PESA', card: 'Card' };
+const METHODS = { cash: 'Cash', mpesa: 'Mobile Money', card: 'Card' };
 
 export function buildReceiptHtml(order, items, payments, paperWidth) {
   const w = String(paperWidth) === '80' ? 80 : 58;
