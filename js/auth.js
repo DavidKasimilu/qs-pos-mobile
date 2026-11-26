@@ -145,7 +145,16 @@ export const Auth = {
     try {
       res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/pin-auth`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: CONFIG.SUPABASE_ANON_KEY },
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: CONFIG.SUPABASE_ANON_KEY,
+          // The caller is not signed in yet, so the anon key doubles as the Authorization token.
+          // Supabase's platform gateway checks this header for a validly-signed JWT BEFORE our function
+          // code runs; without it (even with "Verify JWT" off) some projects still 401 at the gateway,
+          // which the browser reports as a generic network error, not as a 401 - indistinguishable from
+          // "no internet". Sending it removes that failure mode regardless of the toggle's state.
+          Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+        },
         body: JSON.stringify({ action: 'login', email, pin }),
       });
     } catch (e) {
