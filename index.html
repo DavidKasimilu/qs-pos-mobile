@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>QuickSell POS Mobile</title>
   
   <link rel="manifest" href="./manifest.json" />
@@ -14,6 +14,17 @@
   <link rel="stylesheet" href="./css/mobile-theme.css" />
   <link rel="stylesheet" href="./css/mobile-layout.css" />
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    /* Real visible height: 100vh on Android Chrome includes the area behind the address bar / nav buttons,
+       which pushed bottom buttons off-screen. Every screen is sized from this value instead. */
+    (function () {
+      function setH() { document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px'); }
+      setH();
+      window.addEventListener('resize', setH);
+      window.addEventListener('orientationchange', function () { setTimeout(setH, 150); });
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', setH);
+    })();
+  </script>
 </head>
 <body>
 
