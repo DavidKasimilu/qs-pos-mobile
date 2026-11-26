@@ -6,6 +6,8 @@ import { Auth, supabase } from './auth.js';
 import { Cart } from './cart.js';
 import { Shift, showNotice } from './shift.js';
 import { Currency } from './currency.js';
+import { Prefs, Device } from './prefs.js';
+import { printReceipt, printTestReceipt } from './receipt.js';
 
 let pendingEmail = '';
 let currentCustomizingProduct = null;
@@ -269,6 +271,9 @@ function bootTerminal() {
   Cart.init(shop?.id);
 
   Currency.applyLabels();
+  Device.initGlobal();
+  loadSettingsControls();
+  Device.applyWakeLock();
 
   const roleEl = document.getElementById('drawer-user-role');
   if (roleEl) roleEl.textContent = (Auth.currentProfile?.role || 'CASHIER').toUpperCase();
@@ -570,7 +575,7 @@ function bindDrawerModules() {
         Router.navigate('inventory');
         populateInventoryDropdowns();
       }
-      else if (target === 'settings') { Router.navigate('settings'); Currency.applyLabels(); }
+      else if (target === 'settings') { Router.navigate('settings'); Currency.applyLabels(); loadSettingsControls(); }
     };
   });
 
@@ -760,10 +765,12 @@ function bindDrawerModules() {
   document.getElementById('btn-save-software-settings').onclick = async () => {
     const btn = document.getElementById('btn-save-software-settings');
     const cur = document.getElementById('set-currency').value;
-    const wake = document.getElementById('set-wakelock').value;
-    if (wake === 'enabled' && 'wakeLock' in navigator) {
-      navigator.wakeLock.request('screen').catch(console.warn);
-    }
+    Prefs.set({
+      wakelock: document.getElementById('set-wakelock').value,
+      haptics: document.getElementById('set-haptics').value,
+    });
+    Device.applyWakeLock();
+    Device.tap();
     btn.disabled = true;
     try {
       if (cur !== Currency.code) {
@@ -780,6 +787,19 @@ function bindDrawerModules() {
     } finally {
       btn.disabled = false;
     }
+  };
+
+  document.getElementById('btn-save-printer-settings').onclick = () => {
+    Prefs.set({
+      printerType: 'system',
+      paperWidth: document.getElementById('set-paper-width').value,
+      autoPrint: document.getElementById('set-auto-print').value,
+    });
+    alert('Printer settings saved.');
+  };
+  document.getElementById('btn-test-print').onclick = () => {
+    Prefs.set({ paperWidth: document.getElementById('set-paper-width').value });
+    printTestReceipt();
   };
 
   window.addEventListener('currency-changed', () => {
@@ -959,7 +979,10 @@ async function openReceiptDetails(orderId) {
     <div style="background:#fff; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:20px 20px 28px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
         <h3 style="margin:0; font-size:1.1rem;">${escHtml(order.receipt_no)}</h3>
-        <button type="button" id="qs-receipt-x" style="border:0; background:#f1f5f9; border-radius:8px; padding:6px 12px; font-weight:700;">Close</button>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="qs-receipt-print" style="border:0; background:#0f766e; color:#fff; border-radius:8px; padding:6px 14px; font-weight:700;">Print</button>
+          <button type="button" id="qs-receipt-x" style="border:0; background:#f1f5f9; border-radius:8px; padding:6px 12px; font-weight:700;">Close</button>
+        </div>
       </div>
       <div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">
         ${new Date(order.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
@@ -977,6 +1000,7 @@ async function openReceiptDetails(orderId) {
     </div>`;
   document.body.appendChild(wrap);
   wrap.querySelector('#qs-receipt-x').onclick = () => wrap.remove();
+  wrap.querySelector('#qs-receipt-print').onclick = () => printReceipt(order, items, payments);
   wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
 }
 
@@ -1627,6 +1651,21 @@ function bindAuthFlows() {
 // =========================================================================
 // Commit Sale Transaction
 // =========================================================================
+function offerReceiptPrint(order) {
+  const auto = Prefs.get().autoPrint === 'yes';
+  if (auto || confirm('Print receipt?')) printReceipt(order, order.items, order.payments);
+}
+
+function loadSettingsControls() {
+  const p = Prefs.get();
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('set-wakelock', p.wakelock);
+  set('set-haptics', p.haptics);
+  set('set-printer-type', 'system');
+  set('set-paper-width', p.paperWidth);
+  set('set-auto-print', p.autoPrint);
+}
+
 async function commitSaleTransaction() {
   const commitBtn = document.getElementById('btn-commit-tender');
   if (!Shift.allowsSales()) {
@@ -1726,6 +1765,7 @@ async function commitSaleTransaction() {
       try { if (Auth.currentShop?.id) await Auth.refreshLocalCatalog(Auth.currentShop.id); } catch (e) { /* ignore */ }
       await loadCatalogData();
       await Shift.refresh();
+      Device.warn();
       alert(`Sale not completed: ${refusedMessage}`);
       return;
     }
@@ -1736,17 +1776,21 @@ async function commitSaleTransaction() {
 
     await IDB.saveReceipt(fullOrder);
 
+    Device.success();
     alert(`Sale completed! Receipt No: ${receiptNo}`);
     document.getElementById('modal-tender').classList.add('hidden');
     Cart.clearTicket(false);
     await loadCatalogData();
+    offerReceiptPrint(fullOrder);
   } catch (err) {
     await IDB.saveOfflineOrder(fullOrder);
     await IDB.saveReceipt(fullOrder);
+    Device.success();
     alert(`Network unavailable. Sale queued locally! Receipt No: ${receiptNo}`);
     document.getElementById('modal-tender').classList.add('hidden');
     Cart.clearTicket(false);
     await loadCatalogData();
+    offerReceiptPrint(fullOrder);
   } finally {
     commitBtn.disabled = false;
     commitBtn.textContent = 'COMPLETE SALE';
