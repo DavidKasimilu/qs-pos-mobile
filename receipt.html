@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt</title>
+<style>
+  :root { --teal:#0d9488; --teal-dark:#0f766e; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#f1f5f9; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color:var(--ink); }
+  .wrap { max-width: 440px; margin: 0 auto; padding: 20px 14px 40px; }
+  .card { background:#fff; border-radius:12px; padding:22px 20px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  h1 { margin:0; font-size:1.25rem; text-align:center; }
+  .sub { text-align:center; color:var(--muted); font-size:.82rem; margin-top:4px; }
+  .meta { display:flex; justify-content:space-between; font-size:.85rem; color:var(--muted); margin:16px 0 8px; }
+  .item { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-top:1px solid var(--line); }
+  .item small { display:block; color:var(--muted); }
+  .row { display:flex; justify-content:space-between; padding:4px 0; font-size:.92rem; }
+  .total { font-weight:800; font-size:1.1rem; border-top:1px solid var(--line); margin-top:8px; padding-top:10px; }
+  .h { font-size:.72rem; font-weight:800; letter-spacing:.06em; color:var(--teal-dark); margin:16px 0 4px; }
+  .msg { text-align:center; padding:40px 10px; color:var(--muted); }
+  button { margin-top:18px; width:100%; height:46px; border:0; border-radius:8px; background:var(--teal); color:#fff; font-weight:700; font-size:.95rem; cursor:pointer; }
+  .thanks { text-align:center; color:var(--muted); font-size:.8rem; margin-top:16px; }
+  @media print { body { background:#fff; } .card { box-shadow:none; } button { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="card"><div class="msg">Loading receipt...</div></div></div>
+<script>
+(function () {
+  var SUPABASE_URL = 'https://nceblfeenegfzebeiivx.supabase.co';
+  var ANON_KEY = 'sb_publishable_wc82l8uhVqffrUhY3-XTng_GtISnSLx';
+  var card = document.getElementById('card');
+  var id = new URLSearchParams(location.search).get('o') || '';
+
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function money(n) { return (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  var METHODS = { cash: 'Cash', mpesa: 'Mobile Money', card: 'Card' };
+  function fail(t) { card.innerHTML = '<div class="msg">' + esc(t) + '</div>'; }
+
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return fail('This receipt link is not valid.');
+
+  fetch(SUPABASE_URL + '/rest/v1/rpc/get_public_receipt', {
+    method: 'POST',
+    headers: { apikey: ANON_KEY, Authorization: 'Bearer ' + ANON_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_order_id: id })
+  }).then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (d) {
+    if (!d || !d.order) return fail('Receipt not found. If the sale was just made, try again in a minute.');
+    var o = d.order, s = d.shop || {}, cur = esc(s.currency || '');
+    document.title = 'Receipt ' + o.receipt_no;
+    var items = (d.items || []).map(function (i) {
+      return '<div class="item"><div>' + esc(i.product_name) + '<small>' + Number(i.quantity) + ' x ' + money(i.unit_price) + '</small></div><strong>' + money(i.total) + '</strong></div>';
+    }).join('');
+    var pays = (d.payments || []).map(function (p) {
+      return '<div class="row"><span>' + esc(METHODS[p.payment_method] || p.payment_method) + (p.reference_code ? ' (' + esc(p.reference_code) + ')' : '') + '</span><span>' + money(p.amount) + '</span></div>';
+    }).join('');
+    card.innerHTML =
+      '<h1>' + esc(s.name || 'Receipt') + '</h1>' +
+      (s.address ? '<div class="sub">' + esc(s.address) + '</div>' : '') +
+      (s.phone ? '<div class="sub">Tel: ' + esc(s.phone) + '</div>' : '') +
+      '<div class="meta"><span>' + esc(o.receipt_no) + '</span><span>' + esc(new Date(o.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '</span></div>' +
+      items +
+      '<div style="border-top:1px solid var(--line);margin-top:2px;padding-top:8px;">' +
+      '<div class="row"><span>Subtotal</span><span>' + money(o.subtotal) + '</span></div>' +
+      (Number(o.discount_amount) ? '<div class="row"><span>Discount</span><span>-' + money(o.discount_amount) + '</span></div>' : '') +
+      (Number(o.tax_amount) ? '<div class="row"><span>Tax</span><span>' + money(o.tax_amount) + '</span></div>' : '') +
+      '<div class="row total"><span>Total' + (cur ? ' (' + cur + ')' : '') + '</span><span>' + money(o.total) + '</span></div></div>' +
+      (pays ? '<div class="h">PAYMENT</div>' + pays : '') +
+      '<div class="thanks">Thank you for shopping with us!</div>' +
+      '<button onclick="window.print()">Print / Save as PDF</button>';
+  }).catch(function () { fail('Could not load this receipt. Check your connection and try again.'); });
+})();
+</script>
+</body>
+</html>
