@@ -5,10 +5,12 @@ import { Router } from './router.js';
 import { Auth, supabase } from './auth.js';
 import { Cart } from './cart.js';
 import { Shift, showNotice } from './shift.js';
+import { Currency } from './currency.js';
 
 let pendingEmail = '';
 let currentCustomizingProduct = null;
 let customDiscountMode = 'pct';
+let catalogSearchQuery = '';
 let productsList = [];
 let categoriesList = [];
 let isMultiSelectMode = false;
@@ -266,8 +268,7 @@ function bootTerminal() {
   const shop = Auth.currentShop;
   Cart.init(shop?.id);
 
-  const currencyEl = document.getElementById('lbl-pos-currency');
-  if (currencyEl) currencyEl.textContent = shop?.currency || 'KES';
+  Currency.applyLabels();
 
   const roleEl = document.getElementById('drawer-user-role');
   if (roleEl) roleEl.textContent = (Auth.currentProfile?.role || 'CASHIER').toUpperCase();
@@ -327,7 +328,7 @@ function renderProductRows(items) {
 
   container.innerHTML = items.map((item) => {
     const rawPrice = item.retail_price ?? item.price ?? 0;
-    const price = Number(rawPrice).toFixed(2);
+    const price = fmtMoney(rawPrice);
     const stock = item.stock_quantity ?? item.stock ?? null;
     const initials = (item.name || 'QS').slice(0, 2).toUpperCase();
 
@@ -569,7 +570,7 @@ function bindDrawerModules() {
         Router.navigate('inventory');
         populateInventoryDropdowns();
       }
-      else if (target === 'settings') Router.navigate('settings');
+      else if (target === 'settings') { Router.navigate('settings'); Currency.applyLabels(); }
     };
   });
 
@@ -756,14 +757,62 @@ function bindDrawerModules() {
   };
 
   // Settings & Security PIN Handlers
-  document.getElementById('btn-save-software-settings').onclick = () => {
-    const cur = document.getElementById('set-currency').value.trim() || 'KES';
+  document.getElementById('btn-save-software-settings').onclick = async () => {
+    const btn = document.getElementById('btn-save-software-settings');
+    const cur = document.getElementById('set-currency').value;
     const wake = document.getElementById('set-wakelock').value;
     if (wake === 'enabled' && 'wakeLock' in navigator) {
       navigator.wakeLock.request('screen').catch(console.warn);
     }
-    alert(`Preferences saved! Base Currency: ${cur}`);
+    btn.disabled = true;
+    try {
+      if (cur !== Currency.code) {
+        if (!confirm(`Change the store currency to ${cur}?\n\nExisting prices and past receipts keep their numbers; only the currency label changes. Update your prices if they were set in a different currency.`)) {
+          Currency.applyLabels();
+          return;
+        }
+        await Currency.set(cur);   // saves on the shop, then 'currency-changed' refreshes the screens
+      }
+      alert(`Preferences saved. Currency: ${Currency.code}`);
+    } catch (err) {
+      Currency.applyLabels();
+      alert(err.message || String(err));
+    } finally {
+      btn.disabled = false;
+    }
   };
+
+  window.addEventListener('currency-changed', () => {
+    Currency.applyLabels();
+    Cart.notifyUpdate();
+    loadCatalogData();
+    loadProductCatalogManagement();
+    loadPastReceipts();
+    refreshCashTab();
+  });
+
+  // Catalog search (products tab or categories tab, whichever is open)
+  const catSearchBtn = document.getElementById('btn-catalog-search');
+  const catSearchWrap = document.getElementById('catalog-search-wrap');
+  const catSearchInput = document.getElementById('inp-catalog-search');
+  if (catSearchBtn && catSearchWrap && catSearchInput) {
+    const syncPlaceholder = () => {
+      const onCats = !document.getElementById('tab-prod-categories').classList.contains('hidden');
+      catSearchInput.placeholder = onCats ? 'Search categories...' : 'Search products by name, SKU or barcode...';
+    };
+    catSearchBtn.onclick = (e) => {
+      e.preventDefault();
+      const opening = catSearchWrap.classList.contains('hidden');
+      catSearchWrap.classList.toggle('hidden');
+      if (opening) { syncPlaceholder(); catSearchInput.focus(); }
+      else { catSearchInput.value = ''; catalogSearchQuery = ''; loadProductCatalogManagement(); }
+    };
+    catSearchInput.oninput = () => {
+      catalogSearchQuery = catSearchInput.value.trim().toLowerCase();
+      loadProductCatalogManagement();
+    };
+    document.querySelectorAll('[data-prod-tab]').forEach((b) => b.addEventListener('click', syncPlaceholder));
+  }
 
   document.getElementById('btn-save-pin-settings').onclick = async () => {
     const isEnabled = document.getElementById('set-pin-enabled').value === 'enabled';
@@ -824,7 +873,7 @@ function receiptRowHtml(r, offline) {
         <strong>${escHtml(r.receipt_no)}</strong>
         <div style="font-size:0.75rem; color:var(--text-muted);">${label}${offline ? ' (Offline)' : ''}</div>
       </div>
-      <strong style="color:var(--primary-teal-dark);">${fmtMoney(r.total)} KES</strong>
+      <strong style="color:var(--primary-teal-dark);">${fmtMoney(r.total)} ${escHtml(Currency.code)}</strong>
     </div>`;
 }
 
@@ -879,7 +928,7 @@ async function openReceiptDetails(orderId) {
   items = items || [];
   payments = payments || [];
 
-  const cur = escHtml(Auth.currentShop?.currency || 'KES');
+  const cur = escHtml(Currency.code);
   const line = (label, value, strong) => `
     <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:0.9rem;">
       <span style="color:#64748b;">${label}</span>
@@ -937,10 +986,8 @@ async function refreshCashTab() {
   if (!lbl) return;
   const breakdown = document.getElementById('cash-breakdown');
   const list = document.getElementById('cash-entries-list');
-  const cur = Auth.currentShop?.currency || 'KES';
-  document.querySelectorAll('#tab-sales-cash label').forEach((l) => {
-    if (/^Amount/.test(l.textContent.trim())) l.textContent = `Amount (${cur})`;
-  });
+  const cur = Currency.code;
+  Currency.applyLabels();
 
   await Shift.refresh();
   const s = Shift.state.shift;
@@ -1027,7 +1074,13 @@ async function loadProductCatalogManagement() {
   const products = await IDB.getCatalog();
   const categories = await IDB.getCategories();
 
-  pList.innerHTML = products.map((p) => {
+  const q = catalogSearchQuery;
+  const catName = new Map(categories.map((c) => [c.id, String(c.name || '').toLowerCase()]));
+  const shownProducts = !q ? products : products.filter((p) =>
+    [p.name, p.sku, p.barcode, catName.get(p.category_id)].some((v) => String(v || '').toLowerCase().includes(q)));
+  const shownCategories = !q ? categories : categories.filter((c) => String(c.name || '').toLowerCase().includes(q));
+
+  pList.innerHTML = (q && !shownProducts.length) ? '<p style="padding:24px; text-align:center; color:var(--text-muted);">No products match your search.</p>' : shownProducts.map((p) => {
     const isChecked = selectedBatchIds.has(p.id) ? 'checked' : '';
     const checkboxHtml = isMultiSelectMode 
       ? `<input type="checkbox" class="batch-checkbox" data-id="${p.id}" ${isChecked} />` 
@@ -1039,7 +1092,7 @@ async function loadProductCatalogManagement() {
           ${checkboxHtml}
           <div>
             <strong>${p.name}</strong>
-            <div style="font-size:0.75rem; color:var(--text-muted);">Stock: ${p.stock_quantity ?? 0} | ${Number(p.retail_price).toFixed(2)} KES</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Stock: ${p.stock_quantity ?? 0} | ${fmtMoney(p.retail_price)} ${escHtml(Currency.code)}</div>
           </div>
         </div>
         <div class="item-row-actions">
@@ -1054,7 +1107,7 @@ async function loadProductCatalogManagement() {
     `;
   }).join('');
 
-  cList.innerHTML = categories.map((c) => `
+  cList.innerHTML = (q && !shownCategories.length) ? '<p style="padding:16px; text-align:center; color:var(--text-muted);">No categories match your search.</p>' : shownCategories.map((c) => `
     <div style="padding:12px; border-bottom:1px solid #e2e8f0; font-weight:600; display:flex; justify-content:space-between; align-items:center;">
       <span>${c.name}</span>
       <div class="item-row-actions">
@@ -1403,7 +1456,7 @@ function bindTerminalActions() {
         return;
       }
       const totals = Cart.getTotals();
-      document.getElementById('tender-grand-total').textContent = totals.grandTotal.toFixed(2);
+      document.getElementById('tender-grand-total').textContent = `${fmtMoney(totals.grandTotal)} ${Currency.code}`;
       document.getElementById('inp-tender-cash-paid').value = totals.grandTotal.toFixed(2);
       document.getElementById('lbl-tender-change').textContent = '0.00';
       modalTender.classList.remove('hidden');

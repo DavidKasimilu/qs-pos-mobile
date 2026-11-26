@@ -1,5 +1,6 @@
 import { supabase } from './auth.js';
 import { IDB } from './idb.js';
+import { Currency } from './currency.js';
 
 export const Cart = {
   items: [],
@@ -136,7 +137,7 @@ export const Cart = {
     const totals = this.getTotals();
     const chargeLabel = document.getElementById('lbl-charge-amount');
     if (chargeLabel) {
-      chargeLabel.textContent = totals.grandTotal.toFixed(2);
+      chargeLabel.textContent = Currency.fmt(totals.grandTotal);
     }
 
     window.dispatchEvent(new CustomEvent('cart-updated', {
