@@ -419,6 +419,7 @@
       <div style="background:var(--primary-teal-light); padding:16px; border-radius:8px; margin-bottom:16px;">
         <span style="font-size:0.8rem; color:var(--primary-teal-dark); font-weight:700;">CURRENT SHIFT BALANCE</span>
         <h2 id="lbl-shift-drawer-cash" style="font-size:1.8rem; color:var(--primary-teal-deep); margin-top:4px;">0.00 KES</h2>
+        <div id="cash-breakdown" style="margin-top:10px; font-size:0.8rem; color:var(--primary-teal-dark);"></div>
       </div>
       <div class="form-underline-group">
         <label>Action Type</label>
@@ -442,6 +443,8 @@
         </div>
       </div>
       <button type="button" class="btn-primary-blue" id="btn-save-cash-action">RECORD CASH TRANSACTION</button>
+      <div style="font-size:0.75rem; font-weight:800; color:var(--primary-teal); letter-spacing:.06em; margin:20px 0 6px;">CASH ENTRIES THIS SHIFT</div>
+      <div id="cash-entries-list"></div>
     </div>
   </section>
 
