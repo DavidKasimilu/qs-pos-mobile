@@ -575,6 +575,7 @@ function bindDrawerModules() {
 
   bindTabSwitching('data-sales-tab', 'tab-sales-');
   document.querySelector('[data-sales-tab="cash"]')?.addEventListener('click', refreshCashTab);
+  document.getElementById('btn-save-cash-action')?.addEventListener('click', saveCashAction);
   bindTabSwitching('data-prod-tab', 'tab-prod-');
   bindTabSwitching('data-inv-tab', 'tab-inv-');
   bindTabSwitching('data-settings-tab', 'tab-settings-');
@@ -930,20 +931,93 @@ async function openReceiptDetails(orderId) {
   wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
 }
 
-// Cash Management tab: live drawer balance for the current shift (server totals, refreshed on open)
+// Cash Management tab: live drawer balance + cash in/out entries for the current shift
 async function refreshCashTab() {
   const lbl = document.getElementById('lbl-shift-drawer-cash');
   if (!lbl) return;
+  const breakdown = document.getElementById('cash-breakdown');
+  const list = document.getElementById('cash-entries-list');
   const cur = Auth.currentShop?.currency || 'KES';
+  document.querySelectorAll('#tab-sales-cash label').forEach((l) => {
+    if (/^Amount/.test(l.textContent.trim())) l.textContent = `Amount (${cur})`;
+  });
+
   await Shift.refresh();
   const s = Shift.state.shift;
   if (!s) {
     lbl.textContent = 'No shift open';
+    if (breakdown) breakdown.innerHTML = 'Start a shift to record cash movements.';
+    if (list) list.innerHTML = '';
     return;
   }
   const t = s.totals || {};
   const expected = t.expected_cash ?? (Number(s.opening_cash || 0) + Number(t.cash_sales || 0) + Number(t.cash_in || 0) - Number(t.cash_out || 0));
   lbl.textContent = `${fmtMoney(expected)} ${cur}`;
+  if (breakdown) {
+    const r = (k, v) => `<div style="display:flex; justify-content:space-between; padding:2px 0;"><span>${k}</span><span>${v}</span></div>`;
+    breakdown.innerHTML =
+      r('Opening cash', fmtMoney(s.opening_cash)) +
+      r('Cash sales', '+ ' + fmtMoney(t.cash_sales)) +
+      r('Cash in', '+ ' + fmtMoney(t.cash_in)) +
+      r('Cash out', '- ' + fmtMoney(t.cash_out));
+  }
+
+  if (!list) return;
+  if (!navigator.onLine || !supabase) {
+    list.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">Connect to the internet to see cash entries.</p>';
+    return;
+  }
+  const { data, error } = await supabase
+    .from('cash_transactions')
+    .select('*')
+    .eq('shop_id', Auth.currentShop.id)
+    .gte('created_at', s.opened_at)
+    .order('created_at', { ascending: false });
+  if (error) { list.innerHTML = `<p style="color:#b91c1c; font-size:0.85rem;">${escHtml(error.message)}</p>`; return; }
+  list.innerHTML = data.length ? data.map((c) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #f1f5f9;">
+      <div>
+        <div style="font-weight:600;">${c.action_type === 'in' ? 'Cash in' : 'Cash out'}${c.note ? ' - ' + escHtml(c.note) : ''}</div>
+        <div style="font-size:0.75rem; color:var(--text-muted);">${new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+      </div>
+      <strong style="color:${c.action_type === 'in' ? '#166534' : '#b91c1c'};">${c.action_type === 'in' ? '+' : '-'} ${fmtMoney(c.amount)}</strong>
+    </div>`).join('') : '<p style="color:var(--text-muted); font-size:0.85rem;">No cash in/out recorded this shift.</p>';
+}
+
+async function saveCashAction() {
+  const btn = document.getElementById('btn-save-cash-action');
+  const type = document.getElementById('cash-action-type').value;
+  const amountEl = document.getElementById('inp-cash-action-amount');
+  const noteEl = document.getElementById('inp-cash-action-note');
+  const amount = parseFloat(amountEl.value);
+
+  if (!Shift.state.shift) return alert('Start a shift before recording cash movements.');
+  if (!navigator.onLine || !supabase) return alert('Recording cash in/out needs an internet connection.');
+  if (Number.isNaN(amount) || amount <= 0) return alert('Enter an amount greater than 0.');
+  if (type === 'out' && !noteEl.value.trim()) return alert('Add a reason for the cash out.');
+
+  btn.disabled = true;
+  btn.textContent = 'SAVING...';
+  try {
+    const { error } = await supabase.from('cash_transactions').insert([{
+      id: crypto.randomUUID(),
+      shop_id: Auth.currentShop.id,
+      cashier_id: Auth.currentUser.id,
+      action_type: type,
+      amount,
+      note: noteEl.value.trim() || null,
+      created_at: new Date().toISOString(),
+    }]);
+    if (error) throw error;
+    amountEl.value = '';
+    noteEl.value = '';
+    await refreshCashTab();
+  } catch (err) {
+    alert('Could not record cash transaction: ' + (err.message || err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'RECORD CASH TRANSACTION';
+  }
 }
 
 async function loadProductCatalogManagement() {
