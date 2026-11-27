@@ -274,6 +274,8 @@ function bindNavigationEvents() {
 
 function bootTerminal() {
   const shop = Auth.currentShop;
+  // this device now knows its store, so staff can sign in with just first name + PIN
+  if (shop?.id) localStorage.setItem('qs_pos_shop', JSON.stringify({ id: shop.id, name: shop.name || '' }));
   Cart.init(shop?.id);
 
   Currency.applyLabels();
@@ -1600,54 +1602,99 @@ function bindAuthFlows() {
 
   const formLogin = document.getElementById('form-mobile-login');
   if (formLogin) {
-    let loginMode = 'password';   // 'password' | 'pin'
-    const btnModePwd = document.getElementById('btn-login-mode-password');
-    const btnModePin = document.getElementById('btn-login-mode-pin');
-    const groupPwd = document.getElementById('group-login-password');
-    const groupPin = document.getElementById('group-login-pin');
-    const rowForgot = document.getElementById('row-forgot-link');
+    let loginMode = 'pin';     // 'pin' (staff) | 'password'
+    let pinByEmail = false;    // PIN mode, but identify with email instead of first name
+    const $l = (id) => document.getElementById(id);
+    const getShop = () => { try { return JSON.parse(localStorage.getItem('qs_pos_shop') || 'null'); } catch (e) { return null; } };
 
+    const applyLoginLayout = () => {
+      const shop = getShop();
+      const isPin = loginMode === 'pin';
+      const useName = isPin && !!shop && !pinByEmail;
+      $l('group-login-firstname').classList.toggle('hidden', !useName);
+      $l('group-login-email').classList.toggle('hidden', useName);
+      $l('group-login-pin').classList.toggle('hidden', !isPin);
+      $l('group-login-password').classList.toggle('hidden', isPin);
+      $l('row-forgot-link').classList.toggle('hidden', isPin);
+      $l('login-store-banner').classList.toggle('hidden', !useName);
+      if (shop) $l('login-store-name').textContent = shop.name || 'This store';
+      $l('login-first-time-hint').classList.toggle('hidden', !(isPin && !shop));
+      const sw = $l('link-pin-switch');
+      $l('row-pin-switch').classList.toggle('hidden', !(isPin && !!shop));
+      if (sw) sw.textContent = pinByEmail ? 'Sign in with first name instead' : 'Use email + PIN instead';
+      const bp = $l('btn-login-mode-pin'); const bw = $l('btn-login-mode-password');
+      bp.className = isPin ? 'btn-primary-blue' : 'btn-outline-blue';
+      bw.className = isPin ? 'btn-outline-blue' : 'btn-primary-blue';
+      [bp, bw].forEach((b) => { b.style.cssText = 'flex:1; padding:10px 0; font-size:0.8rem;'; });
+      $l('btn-submit-login').textContent = 'SIGN IN';
+    };
     const setLoginMode = (mode) => {
       loginMode = mode;
-      const isPin = mode === 'pin';
-      groupPwd?.classList.toggle('hidden', isPin);
-      groupPin?.classList.toggle('hidden', !isPin);
-      rowForgot?.classList.toggle('hidden', isPin);
-      if (btnModePwd) btnModePwd.className = isPin ? 'btn-outline-blue' : 'btn-primary-blue';
-      if (btnModePin) btnModePin.className = isPin ? 'btn-primary-blue' : 'btn-outline-blue';
-      [btnModePwd, btnModePin].forEach((b) => { if (b) b.style.cssText = 'flex:1; padding:10px 0; font-size:0.8rem;'; });
       localStorage.setItem('qs_pos_login_mode', mode);
+      applyLoginLayout();
     };
-    if (btnModePwd) btnModePwd.onclick = () => setLoginMode('password');
-    if (btnModePin) btnModePin.onclick = () => setLoginMode('pin');
+    $l('btn-login-mode-pin').onclick = () => setLoginMode('pin');
+    $l('btn-login-mode-password').onclick = () => setLoginMode('password');
+    $l('link-pin-switch').onclick = (e) => { e.preventDefault(); pinByEmail = !pinByEmail; applyLoginLayout(); };
+    $l('link-change-store').onclick = (e) => {
+      e.preventDefault();
+      if (!confirm('Forget this store on this device? You will sign in once with your email, and the device will remember the store again.')) return;
+      localStorage.removeItem('qs_pos_shop');
+      pinByEmail = false;
+      applyLoginLayout();
+    };
 
-    // terminals: remember the last email and the last sign-in method (never the password or PIN)
+    // terminals: remember the last email, the last sign-in method and the store (never the password or PIN)
     const lastEmail = localStorage.getItem('qs_pos_last_email');
-    if (lastEmail) document.getElementById('login-email').value = lastEmail;
-    setLoginMode(localStorage.getItem('qs_pos_login_mode') === 'pin' ? 'pin' : 'password');
+    if (lastEmail) $l('login-email').value = lastEmail;
+    const storedMode = localStorage.getItem('qs_pos_login_mode');
+    loginMode = storedMode === 'password' || storedMode === 'pin' ? storedMode : (getShop() ? 'pin' : 'password');
+    applyLoginLayout();
+
+    // fast sign-in: submit as soon as the 4th digit is typed
+    $l('login-pin').addEventListener('input', () => {
+      if ($l('login-pin').value.length !== 4) return;
+      const useName = loginMode === 'pin' && !!getShop() && !pinByEmail;
+      const ready = useName ? $l('login-firstname').value.trim() : $l('login-email').value.trim();
+      if (ready) formLogin.requestSubmit();
+    });
 
     formLogin.onsubmit = async (e) => {
       e.preventDefault();
-      const btn = document.getElementById('btn-submit-login');
+      const btn = $l('btn-submit-login');
+      if (btn.disabled) return;
       btn.disabled = true;
       btn.textContent = 'SIGNING IN...';
 
-      const email = document.getElementById('login-email').value.trim();
-
       try {
+        const shop = getShop();
         if (loginMode === 'pin') {
-          const pin = document.getElementById('login-pin').value.trim();
-          if (!/^\d{4}$/.test(pin)) throw new Error('Enter your 4-digit PIN.');
-          await Auth.signInWithPin(email, pin);
-          document.getElementById('login-pin').value = '';
+          const pin = $l('login-pin').value.trim();
+          if (shop && !pinByEmail) {
+            const first = $l('login-firstname').value.trim().split(/\s+/)[0];
+            if (!first) throw new Error('Enter your first name.');
+            if (!/^\d{4}$/.test(pin)) throw new Error('Enter your 4-digit PIN.');
+            await Auth.signInWithFirstName(shop.id, first, pin);
+          } else {
+            const email = $l('login-email').value.trim();
+            if (!email) throw new Error('Enter your email.');
+            if (!/^\d{4}$/.test(pin)) throw new Error('Enter your 4-digit PIN.');
+            await Auth.signInWithPin(email, pin);
+            localStorage.setItem('qs_pos_last_email', email);
+          }
+          $l('login-pin').value = '';
         } else {
-          const pwd = document.getElementById('login-password').value;
+          const email = $l('login-email').value.trim();
+          const pwd = $l('login-password').value;
+          if (!email) throw new Error('Enter your email.');
           if (!pwd) throw new Error('Enter your password.');
           await Auth.signIn(email, pwd);
+          localStorage.setItem('qs_pos_last_email', email);
         }
-        localStorage.setItem('qs_pos_last_email', email);
+        $l('login-firstname').value = '';
         bootTerminal();
       } catch (err) {
+        $l('login-pin').value = '';
         if (err.code === 'use_password') {
           showNotice({
             title: 'Use your password',
@@ -1655,11 +1702,11 @@ function bindAuthFlows() {
             actions: [{ label: 'USE PASSWORD', primary: true, onClick: () => setLoginMode('password') }],
           });
         } else {
-          alert(err.message || 'Invalid email or password.');
+          alert(err.message || 'Sign-in failed.');
         }
       } finally {
         btn.disabled = false;
-        btn.textContent = 'SUBMIT';
+        btn.textContent = 'SIGN IN';
       }
     };
   }

@@ -140,7 +140,15 @@ export const Auth = {
   // Email + 4-digit PIN. The server checks the PIN (hashed, lockouts, throttling) and returns a one-time
   // token that is exchanged for a normal session, so row-level security applies exactly as with a password.
   async signInWithPin(email, pin) {
-    const GENERIC = 'Invalid email or PIN, or too many attempts. Please try again later.';
+    return this._pinLogin({ action: 'login', email, pin }, 'Invalid email or PIN, or too many attempts. Please try again later.');
+  },
+
+  // Fast staff sign-in: the device already knows the store, so only first name + PIN are needed.
+  async signInWithFirstName(shopId, firstName, pin) {
+    return this._pinLogin({ action: 'login', shop_id: shopId, first_name: firstName, pin }, 'Invalid name or PIN, or too many attempts. Please try again later.');
+  },
+
+  async _pinLogin(body, GENERIC) {
     let res;
     try {
       res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/pin-auth`, {
@@ -155,7 +163,7 @@ export const Auth = {
           // "no internet". Sending it removes that failure mode regardless of the toggle's state.
           Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ action: 'login', email, pin }),
+        body: JSON.stringify(body),
       });
     } catch (e) {
       throw new Error('PIN sign-in needs an internet connection. Use your password, or try again when online.');
@@ -167,6 +175,9 @@ export const Auth = {
       const e = new Error(payload.message || 'This is an admin account. Please sign in with your password.');
       e.code = 'use_password';
       throw e;
+    }
+    if (payload.error === 'ambiguous') {
+      throw new Error(payload.message || 'More than one employee matches. Please sign in with your email + PIN instead.');
     }
     if (res.status === 404) {
       throw new Error('PIN sign-in is not set up on the server yet (the pin-auth function is not deployed). Please use your password.');
