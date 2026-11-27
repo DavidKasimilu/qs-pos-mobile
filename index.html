@@ -102,15 +102,25 @@
         <img src="./assets/icon-192.png" alt="Logo" style="width:48px; height:48px; border-radius:12px; margin-bottom:8px; object-fit:contain;" />
         <h2 style="color:var(--primary-teal); font-size:1.25rem; font-weight:800;">SIGN IN</h2>
       </div>
-      <form id="form-mobile-login">
-        <div style="display:flex; gap:8px; margin-bottom:18px;">
-          <button type="button" id="btn-login-mode-password" class="btn-primary-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">PASSWORD</button>
-          <button type="button" id="btn-login-mode-pin" class="btn-outline-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">PIN</button>
+      <form id="form-mobile-login" novalidate>
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <button type="button" id="btn-login-mode-pin" class="btn-primary-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">STAFF PIN</button>
+          <button type="button" id="btn-login-mode-password" class="btn-outline-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">PASSWORD</button>
         </div>
-        <div class="form-underline-group">
+        <div id="login-store-banner" class="hidden" style="text-align:center; margin-bottom:14px; font-size:0.85rem; color:var(--text-muted);">
+          Store: <strong id="login-store-name" style="color:var(--text-main);"></strong>
+          &middot; <a href="#" id="link-change-store" style="color:var(--primary-teal); font-weight:600; text-decoration:none;">Change</a>
+        </div>
+        <div class="form-underline-group hidden" id="group-login-firstname">
+          <label>First name</label>
+          <div class="underline-input-wrap">
+            <input type="text" id="login-firstname" autocapitalize="words" autocomplete="off" autocorrect="off" />
+          </div>
+        </div>
+        <div class="form-underline-group" id="group-login-email">
           <label>Email</label>
           <div class="underline-input-wrap">
-            <input type="email" id="login-email" required autocomplete="email" />
+            <input type="email" id="login-email" autocomplete="email" />
           </div>
         </div>
         <div class="form-underline-group hidden" id="group-login-pin">
@@ -131,7 +141,13 @@
         <div id="row-forgot-link" style="text-align:right; margin-top:-14px; margin-bottom:20px;">
           <a href="#" id="link-goto-forgot" style="font-size:0.8rem; color:var(--primary-teal); text-decoration:none; font-weight:600;">Forgot Password?</a>
         </div>
-        <button type="submit" class="btn-primary-blue" id="btn-submit-login">SUBMIT</button>
+        <div id="login-first-time-hint" class="hidden" style="font-size:0.78rem; color:var(--text-muted); margin:-6px 0 14px; line-height:1.4;">
+          First sign-in on this device: use your email + PIN. After that this device remembers the store, so you only need your first name + PIN.
+        </div>
+        <div id="row-pin-switch" class="hidden" style="text-align:center; margin:0 0 18px;">
+          <a href="#" id="link-pin-switch" style="font-size:0.85rem; color:var(--primary-teal); text-decoration:none; font-weight:600;"></a>
+        </div>
+        <button type="submit" class="btn-primary-blue" id="btn-submit-login">SIGN IN</button>
       </form>
     </div>
   </section>
