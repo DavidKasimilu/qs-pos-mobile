@@ -32,12 +32,16 @@
   <!-- 0. SCREEN LOCK / 4-DIGIT PIN ENTRY OVERLAY -->
   <!-- ===================================================================== -->
   <section id="screen-pin-lock" class="screen hidden" style="z-index:999; background:var(--primary-teal-dark); color:#fff; align-items:center; justify-content:center;">
+    <button type="button" class="icon-touch-btn lock-menu-btn" id="btn-lock-menu" aria-label="More"><i data-lucide="more-vertical"></i></button>
+    <div id="lock-menu" class="pop-menu hidden" style="right:8px; top:54px;">
+      <button type="button" id="btn-lock-exit">Exit</button>
+    </div>
     <div style="text-align:center; padding:20px; max-width:320px; width:100%;">
       <i data-lucide="lock" style="width:52px; height:52px; margin-bottom:12px; color:#fff;"></i>
       <h2 style="font-size:1.4rem; font-weight:800; margin-bottom:4px;">TERMINAL LOCKED</h2>
-      <p style="font-size:0.85rem; opacity:0.85; margin-bottom:24px;">Enter your 4-digit Security PIN to proceed</p>
-      
-      <!-- PIN Dots Display -->
+      <p id="lock-shop-name" style="font-size:0.85rem; opacity:0.85; margin-bottom:4px;"></p>
+      <p style="font-size:0.85rem; opacity:0.85; margin-bottom:24px;">Enter your 4-digit PIN</p>
+
       <div id="pin-dots-wrap" style="display:flex; justify-content:center; gap:16px; margin-bottom:32px;">
         <span class="pin-dot"></span>
         <span class="pin-dot"></span>
@@ -45,7 +49,6 @@
         <span class="pin-dot"></span>
       </div>
 
-      <!-- Keypad -->
       <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; width:100%;">
         <button type="button" class="pin-key-btn" data-key="1">1</button>
         <button type="button" class="pin-key-btn" data-key="2">2</button>
@@ -103,33 +106,13 @@
         <h2 style="color:var(--primary-teal); font-size:1.25rem; font-weight:800;">SIGN IN</h2>
       </div>
       <form id="form-mobile-login" novalidate>
-        <div style="display:flex; gap:8px; margin-bottom:16px;">
-          <button type="button" id="btn-login-mode-pin" class="btn-primary-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">STAFF PIN</button>
-          <button type="button" id="btn-login-mode-password" class="btn-outline-blue" style="flex:1; padding:10px 0; font-size:0.8rem;">PASSWORD</button>
-        </div>
-        <div id="login-store-banner" class="hidden" style="text-align:center; margin-bottom:14px; font-size:0.85rem; color:var(--text-muted);">
-          Store: <strong id="login-store-name" style="color:var(--text-main);"></strong>
-          &middot; <a href="#" id="link-change-store" style="color:var(--primary-teal); font-weight:600; text-decoration:none;">Change</a>
-        </div>
-        <div class="form-underline-group hidden" id="group-login-firstname">
-          <label>First name</label>
-          <div class="underline-input-wrap">
-            <input type="text" id="login-firstname" autocapitalize="words" autocomplete="off" autocorrect="off" />
-          </div>
-        </div>
-        <div class="form-underline-group" id="group-login-email">
+        <div class="form-underline-group">
           <label>Email</label>
           <div class="underline-input-wrap">
             <input type="email" id="login-email" autocomplete="email" />
           </div>
         </div>
-        <div class="form-underline-group hidden" id="group-login-pin">
-          <label>4-digit PIN</label>
-          <div class="underline-input-wrap">
-            <input type="password" id="login-pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" style="letter-spacing:8px; font-weight:700;" />
-          </div>
-        </div>
-        <div class="form-underline-group" id="group-login-password">
+        <div class="form-underline-group">
           <label>Password</label>
           <div class="underline-input-wrap">
             <input type="password" id="login-password" autocomplete="current-password" />
@@ -138,14 +121,8 @@
             </button>
           </div>
         </div>
-        <div id="row-forgot-link" style="text-align:right; margin-top:-14px; margin-bottom:20px;">
+        <div style="text-align:right; margin-top:-14px; margin-bottom:20px;">
           <a href="#" id="link-goto-forgot" style="font-size:0.8rem; color:var(--primary-teal); text-decoration:none; font-weight:600;">Forgot Password?</a>
-        </div>
-        <div id="login-first-time-hint" class="hidden" style="font-size:0.78rem; color:var(--text-muted); margin:-6px 0 14px; line-height:1.4;">
-          First sign-in on this device: use your email + PIN. After that this device remembers the store, so you only need your first name + PIN.
-        </div>
-        <div id="row-pin-switch" class="hidden" style="text-align:center; margin:0 0 18px;">
-          <a href="#" id="link-pin-switch" style="font-size:0.85rem; color:var(--primary-teal); text-decoration:none; font-weight:600;"></a>
         </div>
         <button type="submit" class="btn-primary-blue" id="btn-submit-login">SIGN IN</button>
       </form>

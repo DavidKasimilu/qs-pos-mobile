@@ -1,4 +1,4 @@
-const CACHE_NAME = 'qs-pos-mobile-direct-v15';
+const CACHE_NAME = 'qs-pos-mobile-direct-v16';
 
 const CRITICAL_ASSETS = [
   './',
@@ -17,6 +17,7 @@ const CRITICAL_ASSETS = [
   './js/receipt.js',
   './js/share.js',
   './js/checkout.js',
+  './js/ui.js',
   './js/router.js',
   './js/app.js'
 ];
