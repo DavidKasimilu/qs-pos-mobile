@@ -4,6 +4,7 @@
 import { supabase, Auth } from './auth.js';
 import { SyncEngine } from './sync.js';
 import { IDB } from './idb.js';
+import { UI } from './ui.js';
 
 const CACHE_KEY = 'qs_pos_shift_cache';
 const POLL_MS = 45000;
@@ -152,7 +153,7 @@ export const Shift = {
     // push every pending sale first so the shift totals are complete
     try { await SyncEngine.syncPendingData(); } catch (e) { /* offline: handled below */ }
     const pending = await IDB.getPendingOrders();
-    if (pending.length && !confirm(`${pending.length} sale(s) on this device have not synced yet.\nThey will still be counted once they sync. Close the shift anyway?`)) {
+    if (pending.length && !await UI.confirm(`${pending.length} sale(s) on this device have not synced yet.\nThey will still be counted once they sync. Close the shift anyway?`)) {
       return null;
     }
 
@@ -196,7 +197,7 @@ export const Shift = {
     gate.querySelector('#qs-gate-start').onclick = async () => {
       const btn = gate.querySelector('#qs-gate-start');
       const cash = parseFloat(gate.querySelector('#qs-gate-cash').value || '0');
-      if (Number.isNaN(cash) || cash < 0) return alert('Enter the opening cash (0 or more).');
+      if (Number.isNaN(cash) || cash < 0) return UI.alert('Enter the opening cash (0 or more).');
       btn.disabled = true; btn.textContent = 'STARTING...';
       try {
         const res = await this.startShift(cash, gate.querySelector('#qs-gate-notes').value.trim());
@@ -204,7 +205,7 @@ export const Shift = {
         gate.querySelector('#qs-gate-cash').value = '0';
         gate.querySelector('#qs-gate-notes').value = '';
       } catch (err) {
-        alert(err.message);
+        UI.alert(err.message);
       } finally {
         btn.disabled = false; btn.textContent = 'START SHIFT';
       }
@@ -263,14 +264,21 @@ export const Shift = {
     const need = this.active && this.state.loaded && !this.state.unavailable && this.state.required && !this.state.shift;
     const unknown = this.active && !this.state.loaded;
 
+    const staff = String(Auth.currentProfile?.role || '').toLowerCase() === 'staff';
     if (gate) {
       gate.style.display = need || unknown ? 'flex' : 'none';
+      // staff can sell but cannot start a shift: only the form is replaced by an instruction
+      gate.querySelector('h2').textContent = staff ? 'Waiting for a shift' : 'Start a shift';
+      gate.querySelectorAll('input, label, #qs-gate-start').forEach((el) => { el.style.display = staff ? 'none' : ''; });
       gate.querySelector('#qs-gate-sub').textContent =
         `${Auth.currentShop?.name || 'Store'} - ${Auth.currentProfile?.full_name || Auth.currentUser?.email || ''}`;
       gate.querySelector('#qs-gate-cur').textContent = currency();
       const msg = gate.querySelector('#qs-gate-msg');
       const startBtn = gate.querySelector('#qs-gate-start');
-      if (unknown) {
+      if (staff && !unknown) {
+        msg.style.display = 'block';
+        msg.textContent = 'No shift is open yet. Ask a cashier, manager or admin to start one, then try again.';
+      } else if (unknown) {
         msg.style.display = 'block';
         msg.textContent = 'Connect to the internet to check the shift for this store.';
         startBtn.disabled = true;
@@ -301,6 +309,10 @@ export const Shift = {
   },
 
   async openModal() {
+    if (String(Auth.currentProfile?.role || '').toLowerCase() === 'staff') {
+      showNotice({ title: 'Not available', message: 'Only a cashier, manager or admin can open the shift screen.' });
+      return;
+    }
     await this.refresh();
     if (!this.state.shift) { this.render(); return; }          // the gate takes over
 
@@ -353,7 +365,7 @@ export const Shift = {
         <button type="button" id="qs-close-confirm" style="width:100%; padding:14px; border:0; border-radius:10px; background:#b91c1c; color:#fff; font-weight:800;">CONFIRM CLOSE</button>`;
       actions.querySelector('#qs-close-confirm').onclick = async () => {
         const counted = parseFloat(actions.querySelector('#qs-close-cash').value);
-        if (Number.isNaN(counted) || counted < 0) return alert('Enter the cash counted in the drawer.');
+        if (Number.isNaN(counted) || counted < 0) return UI.alert('Enter the cash counted in the drawer.');
         const btn = actions.querySelector('#qs-close-confirm');
         btn.disabled = true; btn.textContent = 'CLOSING...';
         try {
@@ -366,7 +378,7 @@ export const Shift = {
             message: `Total sales: ${money(closed.totals?.total_sales)} ${currency()}\nExpected cash: ${money(closed.expected_cash)}\nCounted cash: ${money(closed.actual_cash)}\nDifference: ${diff > 0 ? '+' : ''}${money(diff)} ${currency()}`,
           });
         } catch (err) {
-          alert(err.message);
+          UI.alert(err.message);
           btn.disabled = false; btn.textContent = 'CONFIRM CLOSE';
         }
       };

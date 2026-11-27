@@ -4,6 +4,7 @@ import { Currency } from './currency.js';
 import { Prefs, Device } from './prefs.js';
 import { printReceipt } from './receipt.js';
 import { openShareDialog, emailReceipt } from './share.js';
+import { UI } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -90,7 +91,7 @@ async function chargeSingle() {
   let change = 0;
   if (method === 'cash') {
     const tendered = parseFloat($('pay-cash-input').value);
-    if (Number.isNaN(tendered) || tendered + 0.005 < total) return alert('Cash received is less than the total.');
+    if (Number.isNaN(tendered) || tendered + 0.005 < total) return UI.alert('Cash received is less than the total.');
     change = r2(tendered - total);
   }
   const ref = $('pay-ref').value.trim();
@@ -140,8 +141,8 @@ function openSplit() {
   renderSplit();
 }
 
-function leaveSplit() {
-  if (rows.some((r) => r.paid) && !confirm('Go back and discard the payments already taken on this screen? Nothing has been recorded yet.')) return;
+async function leaveSplit() {
+  if (rows.some((r) => r.paid) && !await UI.confirm('Go back and discard the payments already taken on this screen? Nothing has been recorded yet.')) return;
   rows = [];
   hide('screen-split');
   show('screen-payment');
@@ -152,7 +153,7 @@ async function chargeRow(i) {
   const r = rows[i];
   if (!r || r.paid) return;
   let amt = r2(parseFloat(rowEl.querySelector('[data-act="amount"]').value));
-  if (Number.isNaN(amt) || amt <= 0) return alert('Enter an amount greater than 0.');
+  if (Number.isNaN(amt) || amt <= 0) return UI.alert('Enter an amount greater than 0.');
   amt = Math.min(amt, remaining());
   r.amount = amt;
   const refEl = rowEl.querySelector('[data-act="ref"]');
@@ -192,7 +193,7 @@ function onSplitClick(e) {
   if (!btn || !['del', 'charge'].includes(btn.dataset.act)) return;
   const i = Number(btn.closest('.split-row').dataset.i);
   if (btn.dataset.act === 'charge') return void chargeRow(i);
-  if (rows.filter((x) => !x.paid).length <= 1) return alert('At least one payment must remain.');
+  if (rows.filter((x) => !x.paid).length <= 1) return UI.alert('At least one payment must remain.');
   rows.splice(i, 1);
   rebalance();
   renderSplit();
@@ -232,9 +233,9 @@ async function sendEmail() {
   btn.textContent = 'SENDING...';
   try {
     await emailReceipt(sale.order, $('paid-email').value);
-    alert('Receipt sent to ' + $('paid-email').value.trim());
+    UI.alert('Receipt sent to ' + $('paid-email').value.trim());
   } catch (err) {
-    alert(err.message || String(err));
+    UI.alert(err.message || String(err));
   } finally {
     btn.disabled = false;
     btn.textContent = old;

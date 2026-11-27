@@ -10,6 +10,7 @@ import { Prefs, Device } from './prefs.js';
 import { printReceipt, printTestReceipt } from './receipt.js';
 import { Checkout } from './checkout.js';
 import { openShareDialog } from './share.js';
+import { UI } from './ui.js';
 
 let pendingEmail = '';
 let currentCustomizingProduct = null;
@@ -20,10 +21,11 @@ let categoriesList = [];
 let isMultiSelectMode = false;
 let selectedBatchIds = new Set();
 let pinEntryBuffer = '';
-// The old on-device screen-lock PIN is retired: "Lock terminal" now signs the person out so the next staff member
-// can sign in with their own email + PIN, and the PIN is only used for signing in (stored hashed on the server).
-let appPinCode = null;
-try { localStorage.removeItem('qs_pos_app_pin'); } catch (e) { /* ignore */ }
+// "Lock terminal" signs the current person out and shows the dial pad. A cashier or staff member unlocks it with
+// their own 4-digit PIN (checked on the server, stored hashed). Managers and admins have no PIN: they use Exit.
+const LOCK_FLAG = 'qs_pos_locked';
+const getStoredShop = () => { try { return JSON.parse(localStorage.getItem('qs_pos_shop') || 'null'); } catch (e) { return null; } };
+let lockBusy = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   Router.init();
@@ -59,16 +61,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateOnlineStatus(navigator.onLine);
 
   try {
-    const session = await Auth.syncSession();
-    if (session?.user) {
-      if (appPinCode) {
-        lockTerminalPin();
-      } else {
-        bootTerminal();
-      }
-    } else {
-      Router.navigate('splash', false);
+    if (localStorage.getItem(LOCK_FLAG) === '1') {
+      if (getStoredShop()?.id) { showPinLock(); return; }
+      localStorage.removeItem(LOCK_FLAG);   // the device no longer knows its store: use the normal sign-in
     }
+    const session = await Auth.syncSession();
+    if (session?.user) bootTerminal();
+    else Router.navigate('splash', false);
   } catch (err) {
     Router.navigate('splash', false);
   }
@@ -77,73 +76,108 @@ document.addEventListener('DOMContentLoaded', async () => {
 // =========================================================================
 // Security PIN & Screen Lock Management
 // =========================================================================
-function bindSecurityPinPad() {
-  const pinDots = document.querySelectorAll('.pin-dot');
-  
-  const updatePinDots = () => {
-    pinDots.forEach((dot, idx) => {
-      if (idx < pinEntryBuffer.length) {
-        dot.classList.add('filled');
-      } else {
-        dot.classList.remove('filled');
-      }
-    });
-  };
+function updatePinDots() {
+  document.querySelectorAll('.pin-dot').forEach((dot, idx) => dot.classList.toggle('filled', idx < pinEntryBuffer.length));
+}
 
+function resetPinEntry() {
+  pinEntryBuffer = '';
+  updatePinDots();
+}
+
+function bindSecurityPinPad() {
   document.querySelectorAll('.pin-key-btn[data-key]').forEach((btn) => {
     btn.onclick = (e) => {
       e.preventDefault();
-      if (pinEntryBuffer.length < 4) {
-        pinEntryBuffer += btn.dataset.key;
-        updatePinDots();
-        if (pinEntryBuffer.length === 4) {
-          setTimeout(verifyPinCode, 100);
-        }
-      }
+      if (lockBusy || pinEntryBuffer.length >= 4) return;
+      pinEntryBuffer += btn.dataset.key;
+      updatePinDots();
+      if (pinEntryBuffer.length === 4) setTimeout(verifyPinCode, 120);
     };
   });
 
   const btnClear = document.getElementById('btn-pin-clear');
-  if (btnClear) {
-    btnClear.onclick = () => {
-      pinEntryBuffer = '';
-      updatePinDots();
-    };
-  }
+  if (btnClear) btnClear.onclick = () => { if (!lockBusy) resetPinEntry(); };
 
   const btnBack = document.getElementById('btn-pin-backspace');
-  if (btnBack) {
-    btnBack.onclick = () => {
-      pinEntryBuffer = pinEntryBuffer.slice(0, -1);
-      updatePinDots();
-    };
-  }
+  if (btnBack) btnBack.onclick = () => { if (lockBusy) return; pinEntryBuffer = pinEntryBuffer.slice(0, -1); updatePinDots(); };
+
+  // 3-dot menu on the lock screen: Exit -> the main sign-in screen
+  const menu = document.getElementById('lock-menu');
+  document.getElementById('btn-lock-menu').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); };
+  document.addEventListener('click', () => menu.classList.add('hidden'));
+  document.getElementById('btn-lock-exit').onclick = () => {
+    menu.classList.add('hidden');
+    localStorage.removeItem(LOCK_FLAG);
+    resetPinEntry();
+    document.getElementById('screen-pin-lock').classList.add('hidden');
+    Router.navigate('splash', false);
+  };
 }
 
-function verifyPinCode() {
-  if (pinEntryBuffer === appPinCode) {
-    pinEntryBuffer = '';
-    document.querySelectorAll('.pin-dot').forEach((d) => d.classList.remove('filled'));
+async function verifyPinCode() {
+  if (lockBusy) return;
+  const pin = pinEntryBuffer;
+  const shop = getStoredShop();
+  if (pin.length !== 4) return;
+  if (!shop?.id) {
+    localStorage.removeItem(LOCK_FLAG);
+    document.getElementById('screen-pin-lock').classList.add('hidden');
+    Router.navigate('splash', false);
+    return;
+  }
+  lockBusy = true;
+  try {
+    await Auth.signInWithShopPin(shop.id, pin);
+    localStorage.removeItem(LOCK_FLAG);
+    resetPinEntry();
     document.getElementById('screen-pin-lock').classList.add('hidden');
     bootTerminal();
-  } else {
-    alert('Incorrect Security PIN. Please try again.');
-    pinEntryBuffer = '';
-    document.querySelectorAll('.pin-dot').forEach((d) => d.classList.remove('filled'));
+  } catch (err) {
+    resetPinEntry();
+    const wrap = document.getElementById('pin-dots-wrap');
+    wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
+    Device.warn();
+    await UI.alert(err.message || 'Incorrect PIN. Please try again.');
+  } finally {
+    lockBusy = false;
   }
 }
 
 async function lockTerminal() {
-  if (Cart.items.length && !confirm('Locking the terminal clears the current ticket. Continue?')) return;
+  if (!getStoredShop()?.id) {
+    await UI.alert('This device does not know its store yet. Please log out and sign in again.');
+    return;
+  }
+  if (Cart.items.length && !(await UI.confirm('Locking the terminal clears the current ticket. Continue?'))) return;
   try { await Cart.clearTicket(false); } catch (e) { /* ignore */ }
   Shift.stop();
-  await Auth.lockTerminal();
+  localStorage.setItem(LOCK_FLAG, '1');
+  await Auth.lockTerminal();   // signs this person out and reloads into the lock screen
 }
 
-function lockTerminalPin() {
-  pinEntryBuffer = '';
-  document.querySelectorAll('.pin-dot').forEach((d) => d.classList.remove('filled'));
+function showPinLock() {
+  resetPinEntry();
+  document.getElementById('lock-shop-name').textContent = getStoredShop()?.name || '';
   document.getElementById('screen-pin-lock').classList.remove('hidden');
+}
+
+// Staff can only sell and look at sales activity; everything else in the menu is greyed out.
+function isStaffRole() {
+  return String(Auth.currentProfile?.role || '').toLowerCase() === 'staff';
+}
+
+function applyRoleAccess() {
+  const staff = isStaffRole();
+  document.querySelectorAll('#side-drawer .drawer-link').forEach((link) => {
+    const allowed = !staff || ['pos', 'sales'].includes(link.dataset.nav) || link.id === 'btn-drawer-logout';
+    link.classList.toggle('drawer-disabled', !allowed);
+    link.disabled = !allowed;
+  });
+  const logoutLabel = document.querySelector('#btn-drawer-logout span');
+  if (logoutLabel) logoutLabel.textContent = staff ? 'Lock Terminal' : 'Log Out';
+  // staff do not see Cash management in Manage Sales
+  document.querySelector('#sales-title-menu [data-sales-tab="cash"]')?.classList.toggle('hidden', staff);
 }
 
 // =========================================================================
@@ -274,7 +308,7 @@ function bindNavigationEvents() {
 
 function bootTerminal() {
   const shop = Auth.currentShop;
-  // this device now knows its store, so staff can sign in with just first name + PIN
+  // this device now knows its store, so the lock screen can sign cashiers and staff in with their PIN
   if (shop?.id) localStorage.setItem('qs_pos_shop', JSON.stringify({ id: shop.id, name: shop.name || '' }));
   Cart.init(shop?.id);
 
@@ -292,6 +326,8 @@ function bootTerminal() {
   Router.navigate('pos');
   loadCatalogData();
   Shift.start();   // checks the shop's shift; asks to start one when none is open
+  applyRoleAccess();
+  setTimeout(applyRoleAccess, 400);   // the Shift menu entry is added a moment later
 }
 
 async function loadCatalogData() {
@@ -412,7 +448,7 @@ function bindCustomerModalActions() {
     const phone = document.getElementById('cust-phone').value.trim();
 
     if (!firstName || !phone) {
-      alert('First name and phone number are required.');
+      UI.alert('First name and phone number are required.');
       return;
     }
 
@@ -450,14 +486,14 @@ function bindCustomerModalActions() {
         await IDB.queueOutbox(editId ? 'UPDATE_CUSTOMER' : 'CREATE_CUSTOMER', custObj);
       }
       await IDB.putItem('cached_customers', custObj);
-      alert(editId ? 'Customer updated!' : 'Customer saved!');
+      UI.alert(editId ? 'Customer updated!' : 'Customer saved!');
       modalAddCust.classList.add('hidden');
       renderCustomerList();
     } catch (err) {
       console.warn('[Customer] Operation buffered:', err);
       await IDB.queueOutbox(editId ? 'UPDATE_CUSTOMER' : 'CREATE_CUSTOMER', custObj);
       await IDB.putItem('cached_customers', custObj);
-      alert('Customer saved locally and queued for sync.');
+      UI.alert('Customer saved locally and queued for sync.');
       modalAddCust.classList.add('hidden');
       renderCustomerList();
     }
@@ -504,7 +540,7 @@ async function renderCustomerList(filterText = '') {
     btn.onclick = () => {
       const cust = customers.find((c) => c.id === btn.dataset.id);
       Cart.selectedCustomer = cust;
-      alert(`Customer '${cust.name}' attached to current ticket.`);
+      UI.alert(`Customer '${cust.name}' attached to current ticket.`);
       document.getElementById('modal-customer').classList.add('hidden');
     };
   });
@@ -533,7 +569,7 @@ async function renderCustomerList(filterText = '') {
     btn.onclick = async () => {
       const c = customers.find((cust) => cust.id === btn.dataset.id);
       if (!c) return;
-      if (confirm(`Are you sure you want to delete customer '${c.name}'?`)) {
+      if (await UI.confirm(`Are you sure you want to delete customer '${c.name}'?`)) {
         try {
           if (navigator.onLine && supabase) {
             await supabase.from('customers').delete().eq('id', c.id);
@@ -544,7 +580,7 @@ async function renderCustomerList(filterText = '') {
           await IDB.queueOutbox('DELETE_CUSTOMER', { id: c.id });
         }
         await IDB.removeCustomer(c.id);
-        alert('Customer deleted.');
+        UI.alert('Customer deleted.');
         renderCustomerList();
       }
     };
@@ -568,12 +604,13 @@ function bindDrawerModules() {
       e.preventDefault();
       closeDrawer();
       const target = link.dataset.nav;
+      if (isStaffRole() && !['pos', 'sales'].includes(target)) return;
 
       if (target === 'pos') Router.navigate('pos');
       else if (target === 'sales') {
         Router.navigate('sales');
         loadPastReceipts();
-        refreshCashTab();
+        if (!isStaffRole()) refreshCashTab();
       }
       else if (target === 'products') {
         Router.navigate('products');
@@ -636,8 +673,8 @@ function bindDrawerModules() {
   const btnBatchDelete = document.getElementById('btn-batch-delete-confirm');
   if (btnBatchDelete) {
     btnBatchDelete.onclick = async () => {
-      if (!selectedBatchIds.size) return alert('No items selected.');
-      if (confirm(`Are you sure you want to delete ${selectedBatchIds.size} selected item(s)?`)) {
+      if (!selectedBatchIds.size) return UI.alert('No items selected.');
+      if (await UI.confirm(`Are you sure you want to delete ${selectedBatchIds.size} selected item(s)?`)) {
         for (const id of selectedBatchIds) {
           try {
             if (navigator.onLine && supabase) {
@@ -650,7 +687,7 @@ function bindDrawerModules() {
           }
           await IDB.removeProduct(id);
         }
-        alert('Selected items deleted.');
+        UI.alert('Selected items deleted.');
         selectedBatchIds.clear();
         isMultiSelectMode = false;
         document.getElementById('catalog-batch-bar').classList.add('hidden');
@@ -687,7 +724,7 @@ function bindDrawerModules() {
     const editId = document.getElementById('prod-edit-id').value;
     const name = document.getElementById('prod-name').value.trim();
     const price = parseFloat(document.getElementById('prod-retail-price').value) || 0;
-    if (!name || price <= 0) return alert('Valid product name and price required.');
+    if (!name || price <= 0) return UI.alert('Valid product name and price required.');
 
     const nowIso = new Date().toISOString();
     const prodId = editId || crypto.randomUUID();
@@ -734,7 +771,7 @@ function bindDrawerModules() {
     }
 
     await IDB.putItem('cached_catalog', prodObj);
-    alert(editId ? 'Product updated successfully!' : 'Product added successfully!');
+    UI.alert(editId ? 'Product updated successfully!' : 'Product added successfully!');
     modalAddProd.classList.add('hidden');
     await loadCatalogData();
     loadProductCatalogManagement();
@@ -763,7 +800,7 @@ function bindDrawerModules() {
     }
 
     await IDB.putItem('cached_categories', newCat);
-    alert('Category created!');
+    UI.alert('Category created!');
     await loadCatalogData();
     loadProductCatalogManagement();
   };
@@ -781,16 +818,16 @@ function bindDrawerModules() {
     btn.disabled = true;
     try {
       if (cur !== Currency.code) {
-        if (!confirm(`Change the store currency to ${cur}?\n\nExisting prices and past receipts keep their numbers; only the currency label changes. Update your prices if they were set in a different currency.`)) {
+        if (!await UI.confirm(`Change the store currency to ${cur}?\n\nExisting prices and past receipts keep their numbers; only the currency label changes. Update your prices if they were set in a different currency.`)) {
           Currency.applyLabels();
           return;
         }
         await Currency.set(cur);   // saves on the shop, then 'currency-changed' refreshes the screens
       }
-      alert(`Preferences saved. Currency: ${Currency.code}`);
+      UI.alert(`Preferences saved. Currency: ${Currency.code}`);
     } catch (err) {
       Currency.applyLabels();
-      alert(err.message || String(err));
+      UI.alert(err.message || String(err));
     } finally {
       btn.disabled = false;
     }
@@ -802,7 +839,7 @@ function bindDrawerModules() {
       paperWidth: document.getElementById('set-paper-width').value,
       autoPrint: document.getElementById('set-auto-print').value,
     });
-    alert('Printer settings saved.');
+    UI.alert('Printer settings saved.');
   };
   document.getElementById('btn-test-print').onclick = () => {
     Prefs.set({ paperWidth: document.getElementById('set-paper-width').value });
@@ -847,20 +884,20 @@ function bindDrawerModules() {
     const role = String(Auth.currentProfile?.role || '').toLowerCase();
 
     if (!['cashier', 'staff'].includes(role)) {
-      return alert('PIN sign-in is for cashiers and staff. Administrators and managers sign in with their password.');
+      return UI.alert('PIN sign-in is for cashiers and staff. Administrators and managers sign in with their password.');
     }
-    if (!navigator.onLine) return alert('Connect to the internet to change your sign-in PIN.');
+    if (!navigator.onLine) return UI.alert('Connect to the internet to change your sign-in PIN.');
 
     if (isEnabled) {
-      if (!/^\d{4}$/.test(pinCode)) return alert('The PIN must be exactly 4 digits.');
+      if (!/^\d{4}$/.test(pinCode)) return UI.alert('The PIN must be exactly 4 digits.');
       const { error: pinErr } = await supabase.rpc('set_my_pin', { p_pin: pinCode });
-      if (pinErr) return alert(pinErr.message);
+      if (pinErr) return UI.alert(pinErr.message);
       document.getElementById('set-pin-code').value = '';
-      alert('Sign-in PIN saved. You can now sign in with your email and this PIN.');
+      UI.alert('Sign-in PIN saved. You can now sign in with your email and this PIN.');
     } else {
       const { error: clearErr } = await supabase.rpc('clear_my_pin');
-      if (clearErr) return alert(clearErr.message);
-      alert('Sign-in PIN removed. Use your password to sign in.');
+      if (clearErr) return UI.alert(clearErr.message);
+      UI.alert('Sign-in PIN removed. Use your password to sign in.');
     }
   };
 }
@@ -1125,10 +1162,10 @@ async function saveCashAction() {
   const noteEl = document.getElementById('inp-cash-action-note');
   const amount = parseFloat(amountEl.value);
 
-  if (!Shift.state.shift) return alert('Start a shift before recording cash movements.');
-  if (!navigator.onLine || !supabase) return alert('Recording cash in/out needs an internet connection.');
-  if (Number.isNaN(amount) || amount <= 0) return alert('Enter an amount greater than 0.');
-  if (type === 'out' && !noteEl.value.trim()) return alert('Add a reason for the cash out.');
+  if (!Shift.state.shift) return UI.alert('Start a shift before recording cash movements.');
+  if (!navigator.onLine || !supabase) return UI.alert('Recording cash in/out needs an internet connection.');
+  if (Number.isNaN(amount) || amount <= 0) return UI.alert('Enter an amount greater than 0.');
+  if (type === 'out' && !noteEl.value.trim()) return UI.alert('Add a reason for the cash out.');
 
   btn.disabled = true;
   btn.textContent = 'SAVING...';
@@ -1147,7 +1184,7 @@ async function saveCashAction() {
     noteEl.value = '';
     await refreshCashTab();
   } catch (err) {
-    alert('Could not record cash transaction: ' + (err.message || err));
+    UI.alert('Could not record cash transaction: ' + (err.message || err));
   } finally {
     btn.disabled = false;
     btn.textContent = 'RECORD CASH TRANSACTION';
@@ -1260,7 +1297,7 @@ async function loadProductCatalogManagement() {
     btn.onclick = async () => {
       const p = products.find((item) => item.id === btn.dataset.id);
       if (!p) return;
-      if (confirm(`Delete product '${p.name}'?`)) {
+      if (await UI.confirm(`Delete product '${p.name}'?`)) {
         try {
           if (navigator.onLine && supabase) {
             await supabase.from('products').delete().eq('id', p.id);
@@ -1271,7 +1308,7 @@ async function loadProductCatalogManagement() {
           await IDB.queueOutbox('DELETE_PRODUCT', { id: p.id });
         }
         await IDB.removeProduct(p.id);
-        alert('Product deleted.');
+        UI.alert('Product deleted.');
         await loadCatalogData();
         loadProductCatalogManagement();
       }
@@ -1297,7 +1334,7 @@ async function loadProductCatalogManagement() {
         await IDB.queueOutbox('UPDATE_CATEGORY', updated);
       }
       await IDB.upsertCategory(updated);
-      alert('Category updated.');
+      UI.alert('Category updated.');
       await loadCatalogData();
       loadProductCatalogManagement();
     };
@@ -1308,7 +1345,7 @@ async function loadProductCatalogManagement() {
     btn.onclick = async () => {
       const c = categories.find((cat) => cat.id === btn.dataset.id);
       if (!c) return;
-      if (confirm(`Delete category '${c.name}'?`)) {
+      if (await UI.confirm(`Delete category '${c.name}'?`)) {
         try {
           if (navigator.onLine && supabase) {
             await supabase.from('categories').delete().eq('id', c.id);
@@ -1319,7 +1356,7 @@ async function loadProductCatalogManagement() {
           await IDB.queueOutbox('DELETE_CATEGORY', { id: c.id });
         }
         await IDB.removeCategory(c.id);
-        alert('Category deleted.');
+        UI.alert('Category deleted.');
         await loadCatalogData();
         loadProductCatalogManagement();
       }
@@ -1370,7 +1407,8 @@ function bindTerminalActions() {
   if (logoutBtn) {
     logoutBtn.onclick = async (e) => {
       e.preventDefault();
-      if (confirm('Log out of QuickSell POS?')) await Auth.signOut();
+      if (isStaffRole()) { lockTerminal(); return; }
+      if (await UI.confirm('Log out of QuickSell POS?')) await Auth.signOut();
     };
   }
 
@@ -1394,9 +1432,9 @@ function bindTerminalActions() {
 
   const optClear = document.getElementById('opt-clear-cart');
   if (optClear) {
-    optClear.onclick = (e) => {
+    optClear.onclick = async (e) => {
       e.preventDefault();
-      if (confirm('Clear current ticket items?')) {
+      if (await UI.confirm('Clear current ticket items?')) {
         Cart.clearTicket(true);
         if (overflow) overflow.classList.add('hidden');
       }
@@ -1538,11 +1576,11 @@ function bindTerminalActions() {
       e.preventDefault();
       if (!Shift.allowsSales()) {
         window.dispatchEvent(new CustomEvent('qs:need-shift'));
-        alert('Start a shift before making sales.');
+        UI.alert('Start a shift before making sales.');
         return;
       }
       if (!Cart.items.length) {
-        alert('Your ticket is empty. Tap an item to add it to the ticket.');
+        UI.alert('Your ticket is empty. Tap an item to add it to the ticket.');
         return;
       }
       Checkout.open();
@@ -1567,7 +1605,7 @@ function openItemCustomizer(product) {
 
 async function syncEverything() {
   if (!navigator.onLine) {
-    alert('Device is currently offline. Connect to the internet to sync catalog and orders.');
+    UI.alert('Device is currently offline. Connect to the internet to sync catalog and orders.');
     return;
   }
 
@@ -1575,9 +1613,9 @@ async function syncEverything() {
     await Auth.refreshLocalCatalog(Auth.currentShop?.id);
     await loadCatalogData();
     await SyncEngine.syncPendingData();
-    alert('Catalog and pending sales synchronized successfully.');
+    UI.alert('Catalog and pending sales synchronized successfully.');
   } catch (err) {
-    alert('Sync encountered an issue: ' + err.message);
+    UI.alert('Sync encountered an issue: ' + err.message);
   }
 }
 
@@ -1602,108 +1640,29 @@ function bindAuthFlows() {
 
   const formLogin = document.getElementById('form-mobile-login');
   if (formLogin) {
-    let loginMode = 'pin';     // 'pin' (staff) | 'password'
-    let pinByEmail = false;    // PIN mode, but identify with email instead of first name
-    const $l = (id) => document.getElementById(id);
-    const getShop = () => { try { return JSON.parse(localStorage.getItem('qs_pos_shop') || 'null'); } catch (e) { return null; } };
-
-    const applyLoginLayout = () => {
-      const shop = getShop();
-      const isPin = loginMode === 'pin';
-      const useName = isPin && !!shop && !pinByEmail;
-      $l('group-login-firstname').classList.toggle('hidden', !useName);
-      $l('group-login-email').classList.toggle('hidden', useName);
-      $l('group-login-pin').classList.toggle('hidden', !isPin);
-      $l('group-login-password').classList.toggle('hidden', isPin);
-      $l('row-forgot-link').classList.toggle('hidden', isPin);
-      $l('login-store-banner').classList.toggle('hidden', !useName);
-      if (shop) $l('login-store-name').textContent = shop.name || 'This store';
-      $l('login-first-time-hint').classList.toggle('hidden', !(isPin && !shop));
-      const sw = $l('link-pin-switch');
-      $l('row-pin-switch').classList.toggle('hidden', !(isPin && !!shop));
-      if (sw) sw.textContent = pinByEmail ? 'Sign in with first name instead' : 'Use email + PIN instead';
-      const bp = $l('btn-login-mode-pin'); const bw = $l('btn-login-mode-password');
-      bp.className = isPin ? 'btn-primary-blue' : 'btn-outline-blue';
-      bw.className = isPin ? 'btn-outline-blue' : 'btn-primary-blue';
-      [bp, bw].forEach((b) => { b.style.cssText = 'flex:1; padding:10px 0; font-size:0.8rem;'; });
-      $l('btn-submit-login').textContent = 'SIGN IN';
-    };
-    const setLoginMode = (mode) => {
-      loginMode = mode;
-      localStorage.setItem('qs_pos_login_mode', mode);
-      applyLoginLayout();
-    };
-    $l('btn-login-mode-pin').onclick = () => setLoginMode('pin');
-    $l('btn-login-mode-password').onclick = () => setLoginMode('password');
-    $l('link-pin-switch').onclick = (e) => { e.preventDefault(); pinByEmail = !pinByEmail; applyLoginLayout(); };
-    $l('link-change-store').onclick = (e) => {
-      e.preventDefault();
-      if (!confirm('Forget this store on this device? You will sign in once with your email, and the device will remember the store again.')) return;
-      localStorage.removeItem('qs_pos_shop');
-      pinByEmail = false;
-      applyLoginLayout();
-    };
-
-    // terminals: remember the last email, the last sign-in method and the store (never the password or PIN)
-    const lastEmail = localStorage.getItem('qs_pos_last_email');
-    if (lastEmail) $l('login-email').value = lastEmail;
-    const storedMode = localStorage.getItem('qs_pos_login_mode');
-    loginMode = storedMode === 'password' || storedMode === 'pin' ? storedMode : (getShop() ? 'pin' : 'password');
-    applyLoginLayout();
-
-    // fast sign-in: submit as soon as the 4th digit is typed
-    $l('login-pin').addEventListener('input', () => {
-      if ($l('login-pin').value.length !== 4) return;
-      const useName = loginMode === 'pin' && !!getShop() && !pinByEmail;
-      const ready = useName ? $l('login-firstname').value.trim() : $l('login-email').value.trim();
-      if (ready) formLogin.requestSubmit();
-    });
+    const emailEl = document.getElementById('login-email');
+    const lastEmail = localStorage.getItem('qs_pos_last_email');   // never the password
+    if (lastEmail) emailEl.value = lastEmail;
 
     formLogin.onsubmit = async (e) => {
       e.preventDefault();
-      const btn = $l('btn-submit-login');
+      const btn = document.getElementById('btn-submit-login');
       if (btn.disabled) return;
+      const email = emailEl.value.trim();
+      const pwd = document.getElementById('login-password').value;
+      if (!email) return UI.alert('Enter your email.');
+      if (!pwd) return UI.alert('Enter your password.');
+
       btn.disabled = true;
       btn.textContent = 'SIGNING IN...';
-
       try {
-        const shop = getShop();
-        if (loginMode === 'pin') {
-          const pin = $l('login-pin').value.trim();
-          if (shop && !pinByEmail) {
-            const first = $l('login-firstname').value.trim().split(/\s+/)[0];
-            if (!first) throw new Error('Enter your first name.');
-            if (!/^\d{4}$/.test(pin)) throw new Error('Enter your 4-digit PIN.');
-            await Auth.signInWithFirstName(shop.id, first, pin);
-          } else {
-            const email = $l('login-email').value.trim();
-            if (!email) throw new Error('Enter your email.');
-            if (!/^\d{4}$/.test(pin)) throw new Error('Enter your 4-digit PIN.');
-            await Auth.signInWithPin(email, pin);
-            localStorage.setItem('qs_pos_last_email', email);
-          }
-          $l('login-pin').value = '';
-        } else {
-          const email = $l('login-email').value.trim();
-          const pwd = $l('login-password').value;
-          if (!email) throw new Error('Enter your email.');
-          if (!pwd) throw new Error('Enter your password.');
-          await Auth.signIn(email, pwd);
-          localStorage.setItem('qs_pos_last_email', email);
-        }
-        $l('login-firstname').value = '';
+        await Auth.signIn(email, pwd);
+        localStorage.setItem('qs_pos_last_email', email);
+        localStorage.removeItem(LOCK_FLAG);
+        document.getElementById('login-password').value = '';
         bootTerminal();
       } catch (err) {
-        $l('login-pin').value = '';
-        if (err.code === 'use_password') {
-          showNotice({
-            title: 'Use your password',
-            message: err.message,
-            actions: [{ label: 'USE PASSWORD', primary: true, onClick: () => setLoginMode('password') }],
-          });
-        } else {
-          alert(err.message || 'Sign-in failed.');
-        }
+        UI.alert(err.message || 'Sign-in failed.');
       } finally {
         btn.disabled = false;
         btn.textContent = 'SIGN IN';
@@ -1734,7 +1693,7 @@ function bindAuthFlows() {
         if (targetEmailEl) targetEmailEl.textContent = email;
         Router.navigate('otp');
       } catch (err) {
-        alert(err.message || 'Registration failed.');
+        UI.alert(err.message || 'Registration failed.');
       } finally {
         btn.disabled = false;
         btn.textContent = 'SUBMIT';
@@ -1761,7 +1720,7 @@ function loadSettingsControls() {
 async function commitSaleTransaction(payments) {
   if (!Shift.allowsSales()) {
     window.dispatchEvent(new CustomEvent('qs:need-shift'));
-    alert('Start a shift before making sales.');
+    UI.alert('Start a shift before making sales.');
     return null;
   }
 
@@ -1859,7 +1818,7 @@ async function commitSaleTransaction(payments) {
       await loadCatalogData();
       await Shift.refresh();
       Device.warn();
-      alert(`Sale not completed: ${refusedMessage}`);
+      UI.alert(`Sale not completed: ${refusedMessage}`);
       return null;
     }
 

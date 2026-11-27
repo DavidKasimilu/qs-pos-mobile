@@ -139,13 +139,9 @@ export const Auth = {
 
   // Email + 4-digit PIN. The server checks the PIN (hashed, lockouts, throttling) and returns a one-time
   // token that is exchanged for a normal session, so row-level security applies exactly as with a password.
-  async signInWithPin(email, pin) {
-    return this._pinLogin({ action: 'login', email, pin }, 'Invalid email or PIN, or too many attempts. Please try again later.');
-  },
-
-  // Fast staff sign-in: the device already knows the store, so only first name + PIN are needed.
-  async signInWithFirstName(shopId, firstName, pin) {
-    return this._pinLogin({ action: 'login', shop_id: shopId, first_name: firstName, pin }, 'Invalid name or PIN, or too many attempts. Please try again later.');
+  // Lock screen: the device knows its store, the person only types their 4-digit PIN.
+  async signInWithShopPin(shopId, pin) {
+    return this._pinLogin({ action: 'login', shop_id: shopId, pin }, 'Incorrect PIN, or too many attempts. Please try again later.');
   },
 
   async _pinLogin(body, GENERIC) {
@@ -166,7 +162,7 @@ export const Auth = {
         body: JSON.stringify(body),
       });
     } catch (e) {
-      throw new Error('PIN sign-in needs an internet connection. Use your password, or try again when online.');
+      throw new Error('PIN sign-in needs an internet connection. Please try again when you are online.');
     }
     const payload = await res.json().catch(() => ({}));
 
@@ -176,14 +172,14 @@ export const Auth = {
       e.code = 'use_password';
       throw e;
     }
-    if (payload.error === 'ambiguous') {
-      throw new Error(payload.message || 'More than one employee matches. Please sign in with your email + PIN instead.');
+    if (payload.error === 'ambiguous' || payload.error === 'locked') {
+      throw new Error(payload.message || 'Please try again later.');
     }
     if (res.status === 404) {
-      throw new Error('PIN sign-in is not set up on the server yet (the pin-auth function is not deployed). Please use your password.');
+      throw new Error('PIN sign-in is not set up on the server yet (the pin-auth function is not deployed).');
     }
     if ((res.status === 401 || res.status === 403) && !payload.error) {
-      throw new Error('PIN sign-in is blocked by the server (Verify JWT must be switched off for the pin-auth function). Please use your password.');
+      throw new Error('PIN sign-in is blocked by the server (Verify JWT must be switched off for the pin-auth function).');
     }
     if (!res.ok || !payload.token_hash) throw new Error(payload.error || GENERIC);
 
@@ -281,7 +277,7 @@ export const Auth = {
     }
   },
 
-  // "Lock terminal": the next staff member signs in with their own email + PIN. The shift stays open (it belongs
+  // "Lock terminal": the next cashier or staff member unlocks it with their own PIN. The shift stays open (it belongs
   // to the shop), the catalog stays cached and unsynced sales stay queued on the device.
   async lockTerminal() {
     SyncEngine.destroy();
@@ -292,7 +288,6 @@ export const Auth = {
     localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_USER);
     localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE);
     localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP);
-    localStorage.setItem('qs_pos_login_mode', 'pin');
     window.location.reload();
   },
 

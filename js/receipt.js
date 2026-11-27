@@ -3,6 +3,7 @@
 import { Auth } from './auth.js';
 import { Currency } from './currency.js';
 import { Prefs } from './prefs.js';
+import { UI } from './ui.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const METHODS = { cash: 'Cash', mpesa: 'Mobile Money', card: 'Card' };
@@ -78,7 +79,7 @@ export function printReceipt(order, items, payments) {
       frame.contentWindow.focus();
       frame.contentWindow.print();
     } catch (err) {
-      alert('Could not open the print dialog: ' + err.message);
+      UI.alert('Could not open the print dialog: ' + err.message);
     }
     setTimeout(() => frame.remove(), 60000);
   }, 300);

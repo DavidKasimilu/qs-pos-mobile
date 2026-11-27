@@ -2,6 +2,7 @@
 import { Auth, supabase } from './auth.js';
 import { CONFIG } from './config.js';
 import { Currency } from './currency.js';
+import { UI } from './ui.js';
 
 const METHODS = { cash: 'Cash', mpesa: 'Mobile Money', card: 'Card' };
 const money = (n) => Currency.fmt(n);
@@ -152,7 +153,7 @@ async function shareLink(order) {
     return;
   }
   await navigator.clipboard.writeText(url);
-  alert('Receipt link copied.');
+  UI.alert('Receipt link copied.');
 }
 
 // ---------- Dialog: Text / PDF / Link / Email ----------
@@ -209,7 +210,7 @@ export function openShareDialog(order, items, payments, opts = {}) {
       if (m === 'text') await shareText(order, items, payments);
       else if (m === 'pdf') await sharePdf(order, items, payments);
       else if (m === 'link') await shareLink(order);
-      else { await emailReceipt(order, emailEl.value); alert('Receipt emailed to ' + emailEl.value.trim()); }
+      else { await emailReceipt(order, emailEl.value); UI.alert('Receipt emailed to ' + emailEl.value.trim()); }
       close();
     } catch (err) {
       errEl.textContent = err.message || String(err);
