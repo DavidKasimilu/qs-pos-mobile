@@ -233,8 +233,12 @@ function bindNavigationEvents() {
     Router.navigate('signin');
   };
 
+  const splashMenu = document.getElementById('splash-menu');
+  document.getElementById('btn-splash-menu').onclick = (e) => { e.stopPropagation(); splashMenu.classList.toggle('hidden'); };
+  document.addEventListener('click', () => splashMenu.classList.add('hidden'));
   document.getElementById('btn-goto-register').onclick = (e) => {
     e.preventDefault();
+    splashMenu.classList.add('hidden');
     Router.navigate('register');
   };
 
@@ -1406,11 +1410,12 @@ function bindTerminalActions() {
     };
   }
 
-  const optLock = document.getElementById('opt-lock-terminal');
-  if (optLock) {
-    optLock.onclick = (e) => {
+  const drawerLock = document.getElementById('btn-drawer-lock');
+  if (drawerLock) {
+    drawerLock.onclick = (e) => {
       e.preventDefault();
-      if (overflow) overflow.classList.add('hidden');
+      document.getElementById('side-drawer')?.classList.remove('active');
+      document.getElementById('drawer-backdrop')?.classList.remove('active');
       lockTerminal();
     };
   }
