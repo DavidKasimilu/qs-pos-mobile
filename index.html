@@ -67,7 +67,12 @@
   <!-- 1. SPLASH / ENTRY SCREEN -->
   <!-- ===================================================================== -->
   <section id="screen-splash" class="screen">
-    <div style="height:10px;"></div>
+    <div style="display:flex; justify-content:flex-end; padding:8px 8px 0;">
+      <button type="button" class="icon-touch-btn" id="btn-splash-menu" aria-label="More" style="color:var(--text-main);"><i data-lucide="more-vertical"></i></button>
+    </div>
+    <div id="splash-menu" class="pop-menu hidden" style="right:12px; top:52px;">
+      <button type="button" id="btn-goto-register">Register</button>
+    </div>
     <div class="splash-brand-center">
       <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
         <img src="./assets/icon-192.png" alt="QuickSell Logo" style="width:96px; height:96px; border-radius:20px; box-shadow:0 10px 25px rgba(13,148,136,0.3); object-fit:contain;" />
@@ -79,8 +84,7 @@
     </div>
     <!-- Elevated button bar to beat mobile browser bottom nav bar -->
     <div style="width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:52px; padding:0 20px;">
-      <button type="button" class="btn-primary-blue" id="btn-goto-register">Registration</button>
-      <button type="button" class="btn-outline-blue" id="btn-goto-signin">Sign In</button>
+      <button type="button" class="btn-primary-blue" id="btn-goto-signin">Sign In</button>
     </div>
   </section>
 
@@ -325,10 +329,6 @@
         <i data-lucide="refresh-cw" style="width:16px; height:16px;"></i>
         <span>Sync Catalog</span>
       </button>
-      <button type="button" class="overflow-menu-item" id="opt-lock-terminal">
-        <i data-lucide="lock" style="width:16px; height:16px;"></i>
-        <span>Lock Terminal</span>
-      </button>
     </div>
 
     <!-- Offline Status Pill -->
@@ -370,6 +370,7 @@
   <div class="side-drawer-backdrop" id="drawer-backdrop"></div>
   <aside class="side-drawer" id="side-drawer">
     <div class="drawer-header">
+      <button type="button" id="btn-drawer-lock" class="drawer-lock-btn" aria-label="Lock terminal" title="Lock terminal"><i data-lucide="lock"></i></button>
       <h3 style="font-size:1.15rem; font-weight:800;" id="drawer-user-role">ADMIN</h3>
       <span style="font-size:0.8rem; opacity:0.9;" id="drawer-shop-name">Main Branch</span><br/>
       <span style="font-size:0.7rem; opacity:0.75; font-family:monospace;" id="drawer-device-id">POS-01</span>
