@@ -2,6 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { CONFIG } from './config.js';
 import { IDB } from './idb.js';
 import { SyncEngine } from './sync.js';
+import { StaffCache } from './staff-cache.js';
 
 // Direct Supabase Client Initialization
 export const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
@@ -87,6 +88,13 @@ export const Auth = {
           localStorage.setItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP, this.currentShop.id);
         }
 
+        // keep the offline PIN list tidy (only this store's people) and in step with the back-office
+        StaffCache.forgetOtherShops(this.currentShop.id);
+        StaffCache.revalidate(supabase, this.currentShop.id).catch(() => {});
+
+        // someone unlocked this device offline: they stay the active person, while the saved login is only used to sync
+        this.applyOperator();
+
         // Refresh local IndexedDB catalog with current shop products
         if (this.currentShop?.id) {
           await this.refreshLocalCatalog(this.currentShop.id);
@@ -121,6 +129,7 @@ export const Auth = {
           currency: defaultCurrency
         };
 
+        this.applyOperator();
         return { user: this.currentUser, profile: this.currentProfile, shop: this.currentShop };
       }
     } catch (e) {
@@ -129,7 +138,23 @@ export const Auth = {
     return null;
   },
 
+  // Offline unlock: the person who is working now. The Supabase login on the device (whoever signed in last)
+  // is kept only so offline sales can be synced; every sale is recorded under the person who made it.
+  applyOperator() {
+    try {
+      const op = JSON.parse(localStorage.getItem('qs_pos_operator') || 'null');
+      if (!op?.id) return;
+      const entry = StaffCache.get(op.id);
+      const shopId = this.currentShop?.id || entry?.shop_id;
+      if (!entry || (shopId && entry.shop_id !== shopId)) { localStorage.removeItem('qs_pos_operator'); return; }
+      this.currentUser = { id: entry.id, email: entry.email };
+      this.currentProfile = { ...entry.profile, shops: this.currentShop || entry.profile.shops };
+      this.currentShop = this.currentShop || entry.profile.shops || null;
+    } catch (e) { /* ignore */ }
+  },
+
   async signIn(email, password) {
+    localStorage.removeItem('qs_pos_operator');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     const state = await this.syncSession();
@@ -142,6 +167,37 @@ export const Auth = {
   // Lock screen: the device knows its store, the person only types their 4-digit PIN.
   async signInWithShopPin(shopId, pin) {
     return this._pinLogin({ action: 'login', shop_id: shopId, pin }, 'Incorrect PIN, or too many attempts. Please try again later.');
+  },
+
+  // Lock screen: online -> the server checks the PIN (and this device learns the person for offline use);
+  // no connection -> the PIN is checked against what this device saved during an earlier online unlock.
+  async unlockWithPin(shopId, pin) {
+    if (navigator.onLine) {
+      try {
+        await this.signInWithShopPin(shopId, pin);
+        return 'online';
+      } catch (e) {
+        if (!e.offline) throw e;      // the server answered (wrong PIN, locked...): show that
+      }
+    }
+    await this.unlockOffline(shopId, pin);
+    return 'offline';
+  },
+
+  async unlockOffline(shopId, pin) {
+    const r = await StaffCache.verify(shopId, pin);
+    if (!r.ok) {
+      if (r.reason === 'empty') throw new Error('No PINs are saved on this device yet. Connect to the internet and unlock once with your PIN, then it will also work offline.');
+      if (r.reason === 'locked') { const m = Math.max(1, Math.ceil((r.retryAfter || 60) / 60)); throw new Error(`Too many wrong PINs. Try again in ${m} minute${m === 1 ? '' : 's'}.`); }
+      if (r.reason === 'ambiguous') throw new Error('Two employees share this PIN. Ask your manager to give one of you a different PIN.');
+      throw new Error('Incorrect PIN. (You are offline: only people who already unlocked once with internet can unlock.)');
+    }
+    const e = r.entry;
+    localStorage.setItem('qs_pos_operator', JSON.stringify({ id: e.id }));
+    this.currentUser = { id: e.id, email: e.email };
+    this.currentProfile = e.profile;
+    this.currentShop = e.profile.shops || this.currentShop;
+    return true;
   },
 
   async _pinLogin(body, GENERIC) {
@@ -162,7 +218,9 @@ export const Auth = {
         body: JSON.stringify(body),
       });
     } catch (e) {
-      throw new Error('PIN sign-in needs an internet connection. Please try again when you are online.');
+      const offline = new Error('PIN sign-in needs an internet connection. Please try again when you are online.');
+      offline.offline = true;
+      throw offline;
     }
     const payload = await res.json().catch(() => ({}));
 
@@ -186,8 +244,11 @@ export const Auth = {
     const { error } = await supabase.auth.verifyOtp({ token_hash: payload.token_hash, type: 'magiclink' });
     if (error) throw new Error(GENERIC);
 
+    localStorage.removeItem('qs_pos_operator');
     const state = await this.syncSession();
     if (!state) throw new Error(this.lastRejection || 'Sign-in could not be completed.');
+    // this device can now unlock this person offline too
+    try { await StaffCache.remember(this.currentProfile, body.pin); } catch (e) { console.warn('[StaffCache]', e); }
     return true;
   },
 
@@ -279,18 +340,6 @@ export const Auth = {
 
   // "Lock terminal": the next cashier or staff member unlocks it with their own PIN. The shift stays open (it belongs
   // to the shop), the catalog stays cached and unsynced sales stay queued on the device.
-  async lockTerminal() {
-    SyncEngine.destroy();
-    try { await supabase.auth.signOut(); } catch (e) { /* offline: the local session is removed anyway */ }
-    this.currentUser = null;
-    this.currentProfile = null;
-    this.currentShop = null;
-    localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_USER);
-    localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE);
-    localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP);
-    window.location.reload();
-  },
-
   async signOut() {
     SyncEngine.destroy();
     try {
@@ -308,6 +357,8 @@ export const Auth = {
     localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_PROFILE);
     localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHOP);
     localStorage.removeItem(CONFIG.STORAGE_KEYS.ACTIVE_SHIFT);
+    localStorage.removeItem('qs_pos_operator');
+    localStorage.removeItem('qs_pos_locked');
 
     window.location.reload();
   },

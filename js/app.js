@@ -11,6 +11,7 @@ import { printReceipt, printTestReceipt } from './receipt.js';
 import { Checkout } from './checkout.js';
 import { openShareDialog } from './share.js';
 import { UI } from './ui.js';
+import { StaffCache } from './staff-cache.js';
 
 let pendingEmail = '';
 let currentCustomizingProduct = null;
@@ -26,6 +27,7 @@ let pinEntryBuffer = '';
 const LOCK_FLAG = 'qs_pos_locked';
 const getStoredShop = () => { try { return JSON.parse(localStorage.getItem('qs_pos_shop') || 'null'); } catch (e) { return null; } };
 let lockBusy = false;
+function removeBootCover() { document.getElementById('boot-cover')?.remove(); }
 
 document.addEventListener('DOMContentLoaded', async () => {
   Router.init();
@@ -62,7 +64,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     if (localStorage.getItem(LOCK_FLAG) === '1') {
-      if (getStoredShop()?.id) { showPinLock(); return; }
+      if (getStoredShop()?.id) {
+        Auth.syncSession().catch(() => {});   // keep syncing offline sales in the background while locked
+        showPinLock();
+        return;
+      }
       localStorage.removeItem(LOCK_FLAG);   // the device no longer knows its store: use the normal sign-in
     }
     const session = await Auth.syncSession();
@@ -70,6 +76,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     else Router.navigate('splash', false);
   } catch (err) {
     Router.navigate('splash', false);
+  } finally {
+    removeBootCover();
   }
 });
 
@@ -106,12 +114,15 @@ function bindSecurityPinPad() {
   const menu = document.getElementById('lock-menu');
   document.getElementById('btn-lock-menu').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); };
   document.addEventListener('click', () => menu.classList.add('hidden'));
-  document.getElementById('btn-lock-exit').onclick = () => {
+  document.getElementById('btn-lock-exit').onclick = async () => {
     menu.classList.add('hidden');
-    localStorage.removeItem(LOCK_FLAG);
-    resetPinEntry();
-    document.getElementById('screen-pin-lock').classList.add('hidden');
-    Router.navigate('splash', false);
+    let note = '';
+    try {
+      const pending = await IDB.getPendingOrders();
+      if (pending.length) note = `\n\n${pending.length} sale(s) made offline have not synced yet. They stay on this device and sync after you sign in again.`;
+    } catch (e) { /* ignore */ }
+    if (!(await UI.confirm(`Exit to the main sign-in screen? This signs out of this device.${note}`, { okLabel: 'Exit' }))) return;
+    await Auth.signOut();   // clears the lock and reloads into the sign-in screen
   };
 }
 
@@ -121,26 +132,21 @@ async function verifyPinCode() {
   const shop = getStoredShop();
   if (pin.length !== 4) return;
   if (!shop?.id) {
-    localStorage.removeItem(LOCK_FLAG);
-    document.getElementById('screen-pin-lock').classList.add('hidden');
-    Router.navigate('splash', false);
+    await Auth.signOut();
     return;
   }
   lockBusy = true;
   try {
-    await Auth.signInWithShopPin(shop.id, pin);
+    await Auth.unlockWithPin(shop.id, pin);     // online: server check; offline: this device's saved PINs
     localStorage.removeItem(LOCK_FLAG);
-    resetPinEntry();
-    document.getElementById('screen-pin-lock').classList.add('hidden');
-    bootTerminal();
+    window.location.reload();                   // start fresh as this person (the cover hides the reload)
   } catch (err) {
     resetPinEntry();
     const wrap = document.getElementById('pin-dots-wrap');
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
     Device.warn();
-    await UI.alert(err.message || 'Incorrect PIN. Please try again.');
-  } finally {
     lockBusy = false;
+    await UI.alert(err.message || 'Incorrect PIN. Please try again.');
   }
 }
 
@@ -150,10 +156,16 @@ async function lockTerminal() {
     return;
   }
   if (Cart.items.length && !(await UI.confirm('Locking the terminal clears the current ticket. Continue?'))) return;
-  try { await Cart.clearTicket(false); } catch (e) { /* ignore */ }
-  Shift.stop();
+
+  // show the dial pad straight away; nothing else flashes
   localStorage.setItem(LOCK_FLAG, '1');
-  await Auth.lockTerminal();   // signs this person out and reloads into the lock screen
+  document.getElementById('side-drawer')?.classList.remove('active');
+  document.getElementById('drawer-backdrop')?.classList.remove('active');
+  showPinLock();
+
+  // the saved login stays on the device so offline sales keep syncing; only the screen is locked
+  try { Cart.clearTicket(false); } catch (e) { /* ignore */ }
+  try { Shift.stop(); } catch (e) { /* ignore */ }
 }
 
 function showPinLock() {
@@ -318,7 +330,14 @@ function bootTerminal() {
   Device.applyWakeLock();
 
   const roleEl = document.getElementById('drawer-user-role');
-  if (roleEl) roleEl.textContent = (Auth.currentProfile?.role || 'CASHIER').toUpperCase();
+  const roleName = String(Auth.currentProfile?.role || 'cashier');
+  const firstName = String(Auth.currentProfile?.full_name || '').trim().split(/\s+/)[0];
+  if (roleEl) roleEl.textContent = firstName || roleName.toUpperCase();
+  const devEl = document.getElementById('drawer-device-id');
+  if (devEl) {
+    if (!devEl.dataset.base) devEl.dataset.base = devEl.textContent.trim();
+    devEl.textContent = `${roleName.charAt(0).toUpperCase()}${roleName.slice(1).toLowerCase()} \u00b7 ${devEl.dataset.base}`;
+  }
 
   const shopEl = document.getElementById('drawer-shop-name');
   if (shopEl) shopEl.textContent = shop?.name || 'QuickSell Terminal';
@@ -1005,6 +1024,7 @@ async function employeeName(order) {
     const { data } = await supabase.from('profiles').select('full_name').eq('id', order.cashier_id).maybeSingle();
     name = data?.full_name || '';
   }
+  if (!name) name = StaffCache.nameFor(order.cashier_id);
   employeeNames.set(order.cashier_id, name);
   return name;
 }
@@ -1791,11 +1811,7 @@ async function commitSaleTransaction(payments) {
     let refusedMessage = null;
 
     if (navigator.onLine && supabase) {
-      const { error: rpcErr } = await supabase.rpc('process_pos_sale', {
-        p_order: orderPayload,
-        p_items: itemsPayload,
-        p_payments: paymentsPayload
-      });
+      const { error: rpcErr } = await SyncEngine.processSale(orderPayload, itemsPayload, paymentsPayload);
 
       if (!rpcErr) {
         pushedOnline = true;

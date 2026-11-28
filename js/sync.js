@@ -39,6 +39,20 @@ export const SyncEngine = {
     return null;
   },
 
+  // Records a sale for the employee who made it (see process_pos_sale_as in pin-roles-and-offline-sales.sql).
+  // Falls back to the plain function if the new one has not been installed yet.
+  async processSale(order, items, payments) {
+    const args = { p_order: order, p_items: items, p_payments: payments };
+    if (!this.asFnMissing && order.cashier_id) {
+      const res = await supabase.rpc('process_pos_sale_as', { p_cashier_id: order.cashier_id, ...args });
+      const msg = res.error?.message || '';
+      const missing = res.error && (res.error.code === 'PGRST202' || /could not find the function|schema cache/i.test(msg));
+      if (!missing) return res;
+      this.asFnMissing = true;
+    }
+    return supabase.rpc('process_pos_sale', args);
+  },
+
   startBackgroundSync() {
     const shopId = this.getActiveShopId();
     if (shopId) {
@@ -216,11 +230,7 @@ export const SyncEngine = {
           }
           // Offline Sale Orders
           else if (item.type === 'SALE_ORDER') {
-            const { error: saleErr } = await supabase.rpc('process_pos_sale', {
-              p_order: item.payload.order,
-              p_items: item.payload.items,
-              p_payments: item.payload.payments
-            });
+            const { error: saleErr } = await this.processSale(item.payload.order, item.payload.items, item.payload.payments);
             if (saleErr) throw saleErr;
           }
 
@@ -279,11 +289,7 @@ export const SyncEngine = {
         let pushSuccess = false;
         let rpcRejected = false;
         try {
-          const { error: rpcErr } = await supabase.rpc('process_pos_sale', {
-            p_order: orderPayload,
-            p_items: itemsPayload,
-            p_payments: paymentsPayload
-          });
+          const { error: rpcErr } = await this.processSale(orderPayload, itemsPayload, paymentsPayload);
 
           if (!rpcErr) {
             pushSuccess = true;
