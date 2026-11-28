@@ -27,6 +27,9 @@
   </script>
 </head>
 <body>
+  <!-- hides the sign-in screen while the app decides where to start (no flash when unlocking or reopening) -->
+  <div id="boot-cover" style="position:fixed; inset:0; background:#ffffff; z-index:20000;"></div>
+  <script>setTimeout(function () { var c = document.getElementById('boot-cover'); if (c) c.remove(); }, 6000);</script>
 
   <!-- ===================================================================== -->
   <!-- 0. SCREEN LOCK / 4-DIGIT PIN ENTRY OVERLAY -->
@@ -78,7 +81,7 @@
     </div>
     <div class="splash-brand-center">
       <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
-        <img src="./assets/icon-192.png" alt="QuickSell Logo" style="width:96px; height:96px; border-radius:20px; box-shadow:0 10px 25px rgba(13,148,136,0.3); object-fit:contain;" />
+        <img src="./assets/icon-192.png" alt="QuickSell Logo" style="width:114px; height:114px; object-fit:contain;" />
         <div style="text-align:center;">
           <h1 style="font-size:1.75rem; font-weight:800; color:var(--text-main); letter-spacing:-0.5px;">QuickSell</h1>
           <span style="font-size:0.75rem; color:var(--primary-teal); font-weight:700; letter-spacing:2px; display:block; margin-top:2px;">POINT OF SALE</span>
